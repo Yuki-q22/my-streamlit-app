@@ -653,7 +653,7 @@ with st.expander("📌 功能说明", expanded=True):
 
 # 更新日志对话框
 # 更新日志对话框（Streamlit Cloud 简洁版）
-with st.expander("📢 版本更新（必看！）", expanded=False):
+with st.expander("📢 版本更新（2025.6.6更新）", expanded=False):
     st.markdown("""
     ### 2025.6.6更新
     "一分一段数据处理"优化  
