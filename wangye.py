@@ -850,8 +850,3 @@ if not os.path.exists("no_update_log_flag.txt"):
           - 自动补断点
           - 自动增加"最高分——满分"的区间（上海满分660，海南满分900）
         """)
-
-        if st.checkbox("不再显示更新提示"):
-            with open("no_update_log_flag.txt", "w", encoding="utf-8") as f:
-                f.write("用户选择不再提示更新日志")
-            st.success("已设置不再显示更新提示")
