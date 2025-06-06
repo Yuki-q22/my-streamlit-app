@@ -498,7 +498,7 @@ def process_segmentation_file(file_path):
 
     ws['E7'] = '累计人数校验结果'
     ws['F7'] = '分数校验结果'
-    ws['F2'] = '年份校验'  # ✅ 保留标题
+    ws['F2'] = '年份校验'
 
     # 校验 B2 是否为 2025
     if ws['B2'].value != 2025:
@@ -813,7 +813,7 @@ st.markdown("© 2025 数据处理中心", unsafe_allow_html=True)
 
 # 更新日志对话框
 # 更新日志对话框（Streamlit Cloud 简洁版）
-with st.expander("📢 版本更新", expanded=False):
+with st.expander("📢 版本更新（必看！）", expanded=False):
     st.markdown("""
     ### 2025.6.6更新
     • "一分一段数据处理"优化  
