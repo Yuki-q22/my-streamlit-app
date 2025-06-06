@@ -812,7 +812,6 @@ st.markdown("---")
 st.markdown("© 2025 数据处理中心", unsafe_allow_html=True)
 
 # 更新日志对话框
-if not os.path.exists("no_update_log_flag.txt"):
     with st.expander("📢 版本更新", expanded=False):
         st.markdown("""
         ### 2025.6.6更新
