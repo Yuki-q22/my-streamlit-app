@@ -2,8 +2,3 @@ streamlit
 pandas
 openpyxl
 jieba
-sys
-os
-re
-logging
-webbrowser
