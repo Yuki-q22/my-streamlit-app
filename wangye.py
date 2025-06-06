@@ -8,8 +8,7 @@ import jieba
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import openpyxl
 from openpyxl.styles import PatternFill
-import numbers
-from io import BytesIO
+from openpyxl.styles import numbers
 import base64
 import sys
 
