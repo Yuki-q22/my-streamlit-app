@@ -852,4 +852,4 @@ with tab3:
 
 # 页脚
 st.markdown("---")
-st.markdown("© 2025 数据处理中心", unsafe_allow_html=True)
+st.markdown("© 数据处理", unsafe_allow_html=True)
