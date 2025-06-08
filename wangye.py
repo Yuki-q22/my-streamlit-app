@@ -42,7 +42,7 @@ def resource_path(relative_path):
 # ======== 加载学校数据 =========
 try:
     school_data_path = resource_path("school_data.xlsx")
-    school_df = pd.read_excel(school_data_path, header=2)  # 从第3行作为表头（索引从0开始）
+    school_df = pd.read_excel(school_data_path)
     VALID_SCHOOL_NAMES = set(school_df['学校名称'].dropna().str.strip())
 except Exception as e:
     logging.error(f"读取 school_data.xlsx 出错：{e}")
@@ -52,7 +52,7 @@ except Exception as e:
 # ======== 加载招生专业数据 =========
 try:
     major_data_path = resource_path("招生专业.xlsx")
-    major_df = pd.read_excel(major_data_path, header=2)
+    major_df = pd.read_excel(major_data_path)
     VALID_MAJOR_COMBOS = set(major_df['招生专业'].dropna().astype(str).str.strip())
 except Exception as e:
     logging.error(f"读取 招生专业.xlsx 出错：{e}")
@@ -430,7 +430,7 @@ def process_score_file(file_path):
         raise Exception(f"文件保存失败：{e}")
 
 # ============================
-# 学业桥数据处理函数
+# 保持文本格式
 # ============================
 def process_remarks_file(file_path, progress_callback=None):
     try:
