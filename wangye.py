@@ -42,7 +42,7 @@ def resource_path(relative_path):
 # ======== 加载学校数据 =========
 try:
     school_data_path = resource_path("school_data.xlsx")
-    school_df = pd.read_excel(school_data_path)
+    school_df = pd.read_excel(school_data_path, header=2)  # 从第3行作为表头（索引从0开始）
     VALID_SCHOOL_NAMES = set(school_df['学校名称'].dropna().str.strip())
 except Exception as e:
     logging.error(f"读取 school_data.xlsx 出错：{e}")
@@ -52,7 +52,7 @@ except Exception as e:
 # ======== 加载招生专业数据 =========
 try:
     major_data_path = resource_path("招生专业.xlsx")
-    major_df = pd.read_excel(major_data_path)
+    major_df = pd.read_excel(major_data_path, header=2)
     VALID_MAJOR_COMBOS = set(major_df['招生专业'].dropna().astype(str).str.strip())
 except Exception as e:
     logging.error(f"读取 招生专业.xlsx 出错：{e}")
