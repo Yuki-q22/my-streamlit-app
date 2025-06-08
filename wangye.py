@@ -58,6 +58,7 @@ except Exception as e:
     logging.error(f"读取 招生专业.xlsx 出错：{e}")
     VALID_MAJOR_COMBOS = set()
 
+# Streamlit 部分
 def file_uploader():
     st.title("数据处理工具")
     uploaded_file = st.file_uploader("上传文件", type=["xlsx", "xls"])
@@ -70,17 +71,17 @@ def process_file(uploaded_file):
         # 读取文件并跳过前两行，保留标题
         df = pd.read_excel(uploaded_file, header=2)
 
-        # 显示文件的前两行内容
-        st.write("文件的前两行内容：")
+        # 读取前两行内容
         file_df = pd.read_excel(uploaded_file, header=None, nrows=2)
+        st.write("文件的前两行内容：")
         st.write(file_df)
 
         # 处理数据
         chunk = process_chunk(df)
 
-        # 导出文件
+        # 导出文件，前两行内容要一起保存
         output_path = "processed_file.xlsx"
-        chunk.to_excel(output_path, index=False)
+        save_with_original_header(chunk, file_df, output_path)
 
         st.download_button(
             label="下载处理后的文件",
@@ -355,6 +356,24 @@ def process_chunk(chunk):
             lambda x: str(x)[0] if pd.notna(x) and x in ['物理类', '历史类','物理', '历史'] else "")
 
     return chunk
+
+# 保存文件，保持前两行内容
+def save_with_original_header(df, file_df, output_path):
+    with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+        # 先写入前两行内容
+        file_df.to_excel(writer, index=False, header=False, startrow=0)
+
+        # 然后写入数据（从第三行开始）
+        df.to_excel(writer, index=False, startrow=2, header=True)
+
+        # 获取工作表对象
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+
+        # 设置列宽，确保所有内容可见
+        for i, col in enumerate(df.columns):
+            max_len = max(df[col].apply(lambda x: len(str(x))).max(), len(col))
+            worksheet.set_column(i, i, max_len)
 
 
 
