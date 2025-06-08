@@ -58,9 +58,41 @@ except Exception as e:
     logging.error(f"读取 招生专业.xlsx 出错：{e}")
     VALID_MAJOR_COMBOS = set()
 
-# 设置日志，便于排查问题
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.info("启动院校数据处理工具。")
+def file_uploader():
+    st.title("数据处理工具")
+    uploaded_file = st.file_uploader("上传文件", type=["xlsx", "xls"])
+    if uploaded_file is not None:
+        st.write("文件上传成功！")
+        process_file(uploaded_file)
+
+def process_file(uploaded_file):
+    try:
+        # 读取文件并跳过前两行，保留标题
+        df = pd.read_excel(uploaded_file, header=2)
+
+        # 显示文件的前两行内容
+        st.write("文件的前两行内容：")
+        file_df = pd.read_excel(uploaded_file, header=None, nrows=2)
+        st.write(file_df)
+
+        # 处理数据
+        chunk = process_chunk(df)
+
+        # 导出文件
+        output_path = "processed_file.xlsx"
+        chunk.to_excel(output_path, index=False)
+
+        st.download_button(
+            label="下载处理后的文件",
+            data=open(output_path, "rb").read(),
+            file_name="processed_file.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        st.write("处理完成并生成下载链接！")
+
+    except Exception as e:
+        st.error(f"文件处理出错：{e}")
+
 
 def check_school_name(name):
     if pd.isna(name) or not str(name).strip():
@@ -156,10 +188,6 @@ def clean_outer_punctuation(text):
     return ''.join(cleaned_parts)
 
 
-def check_school_name(name):
-    if pd.isna(name) or not str(name).strip():
-        return '学校名称为空'
-    return '匹配' if name.strip() in VALID_SCHOOL_NAMES else '不匹配'
 
 
 def check_score_consistency(row):
@@ -266,7 +294,7 @@ def analyze_and_fix(text):
             # 如果分词与错别字词条相似度很高（但并非完全一致），提示疑似错别字
             if token != typo:
                 ratio = SequenceMatcher(None, token, typo).ratio()
-                if ratio >= 0.9:
+                if ratio >= 0.6:
                     issues.append(f"疑似错别字：'{token}' 可能应为 '{correct}'")
     return text, issues
 
@@ -327,6 +355,8 @@ def process_chunk(chunk):
             lambda x: str(x)[0] if pd.notna(x) and x in ['物理类', '历史类','物理', '历史'] else "")
 
     return chunk
+
+
 
 # ============================
 # 院校分提取相关函数
