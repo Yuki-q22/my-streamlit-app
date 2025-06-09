@@ -121,20 +121,24 @@ def similar(a, b):
 
 
 def normalize_brackets(text):
-    """统一各种括号为中文括号并处理不完整括号"""
+    """统一各种括号为中文括号并处理不完整括号，包括书名号"""
     if pd.isna(text) or not str(text).strip():
         return text
     text = str(text).strip()
-    # 替换所有括号变体为中文括号
-    text = re.sub(r'[\{\[\【《》]', '（', text)
-    text = re.sub(r'[\}\]\】《》]', '）', text)
+
+    # 替换所有括号变体和书名号为中文括号
+    text = re.sub(r'[{\[\【《]', '（', text)  # 添加《
+    text = re.sub(r'[}\]\】》]', '）', text)  # 添加》
+
     # 补全左右括号
     if '（' in text and '）' not in text:
         text += '）'
     if '）' in text and '（' not in text:
         text = '（' + text
+
     # 处理连续右括号
     text = REGEX_PATTERNS['consecutive_right'].sub('）', text)
+
     return text
 
 
