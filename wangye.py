@@ -126,8 +126,8 @@ def normalize_brackets(text):
         return text
     text = str(text).strip()
     # 替换所有括号变体为中文括号
-    text = re.sub(r'[\{\[\【]', '（', text)
-    text = re.sub(r'[\}\]\】]', '）', text)
+    text = re.sub(r'[\{\[\【《》]', '（', text)
+    text = re.sub(r'[\}\]\】《》]', '）', text)
     # 补全左右括号
     if '（' in text and '）' not in text:
         text += '）'
