@@ -637,18 +637,12 @@ def process_segmentation_file(file_path):
     wb.save(output_path)
     return output_path
 
+
 # ============================
 # 专业组代码匹配
 # ============================
 # 配置参数
-SIMILARITY_THRESHOLD = 0.5  # 相似度阈值
-
-# -------------------------------
-# 字段映射
-tableA_fields = [
-    "学校名称", "省份", "招生专业", "专业备注（选填）",
-    "一级层次", "招生科类", "招生批次", "招生类型（选填）"
-]
+SIMILARITY_THRESHOLD = 0.5
 
 rename_mapping_B = {
     "学校": "学校名称",
@@ -661,19 +655,22 @@ rename_mapping_B = {
     "备注": "专业备注（选填）"
 }
 
+key_fields_without_remark = ["学校名称", "省份", "一级层次", "招生科类", "招生批次", "招生类型（选填）"]
+key_fields_with_remark = key_fields_without_remark + ["专业备注（选填）"]
 
-# -------------------------------
-# 清洗备注字段
 def clean_remark(text):
     if pd.isna(text):
         return ""
     return str(text).strip().lower()
 
+def make_key(row, fields):
+    return "|".join([str(row[f]) if pd.notna(row[f]) else "" for f in fields])
 
-# -------------------------------
-# 模糊匹配函数
+def has_duplicates_in_key(df, key_col):
+    return df.duplicated(subset=[key_col], keep=False).any()
+
 def fuzzy_match(row, b_dict):
-    key = "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"])
+    key = make_key(row, key_fields_without_remark)
     candidates = b_dict.get(key, [])
     if not candidates:
         return None
@@ -684,6 +681,8 @@ def fuzzy_match(row, b_dict):
 
     for candidate in candidates:
         remark_b = candidate["专业备注（选填）_清洗"]
+        if not remark_a or not remark_b:
+            continue
         similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
         if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
             max_similarity = similarity
@@ -691,37 +690,34 @@ def fuzzy_match(row, b_dict):
 
     return best_match["专业组代码"] if best_match else None
 
-
-# -------------------------------
-# 主处理函数
 def process_matching(fileA, fileB):
-    # 读取文件A（第一行已经是表头，无需跳过行）
     dfA = pd.read_excel(fileA, header=0)
-
-    # 读取文件B（第一行是表头）
     dfB = pd.read_excel(fileB, header=0)
-
-    # 重命名B的列
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # 清洗备注字段
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
-    # 创建组合键
-    dfB["组合键"] = dfB[tableA_fields].apply(
-        lambda row: "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"]),
-        axis=1
-    )
-    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
+    dfA["组合键_无备注"] = dfA.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
+    dfB["组合键_无备注"] = dfB.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
 
-    # 模糊匹配
-    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+    if not has_duplicates_in_key(dfA, "组合键_无备注") and not has_duplicates_in_key(dfB, "组合键_无备注"):
+        b_dict = dfB.groupby("组合键_无备注").apply(lambda x: x.to_dict('records')).to_dict()
+        def direct_match(row):
+            candidates = b_dict.get(row["组合键_无备注"], [])
+            return candidates[0]["专业组代码"] if candidates else None
+        dfA["专业组代码"] = dfA.apply(direct_match, axis=1)
+    else:
+        dfB["组合键_含备注"] = dfB.apply(lambda row: make_key(row, key_fields_with_remark), axis=1)
+        b_dict = dfB.groupby("组合键_无备注").apply(lambda x: x.to_dict('records')).to_dict()
+        dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
 
-    # 删除所有可能的空列（保险措施）
-    dfA = dfA.dropna(axis=1, how='all')
+    dfA.drop(columns=["专业备注（选填）_清洗", "组合键_无备注"], errors='ignore', inplace=True)
+    if "组合键_含备注" in dfB.columns:
+        dfB.drop(columns=["专业备注（选填）_清洗", "组合键_无备注", "组合键_含备注"], errors='ignore', inplace=True)
 
     return dfA
+
 
 
 # ============================
@@ -970,10 +966,9 @@ with tab4:
                     status_text.text(f"处理中... {percent}%")
 
                     if percent == 100:
-                        # 替换为你的函数：process_match_files(temp_a, temp_b)
                         output_path = "match_result.xlsx"
-                        # 示例：将文件A简单复制为结果（你应替换为匹配处理逻辑）
-                        df = pd.read_excel(temp_a)
+                        # 调用你写好的数据处理函数
+                        df = process_matching(temp_a, temp_b)
                         df.to_excel(output_path, index=False)
 
                 status_text.text("处理完成！")
@@ -992,6 +987,7 @@ with tab4:
 
             except Exception as e:
                 st.error(f"处理过程中发生错误: {str(e)}")
+
 
 
 
