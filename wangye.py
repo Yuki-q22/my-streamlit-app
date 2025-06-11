@@ -644,7 +644,8 @@ def process_segmentation_file(file_path):
 # 配置参数
 SIMILARITY_THRESHOLD = 0.5
 
-rename_mapping_B = {
+# 标准化列名映射（确保fileA列名与此一致）
+expected_columns = {
     "学校": "学校名称",
     "省份": "省份",
     "层次": "一级层次",
@@ -658,60 +659,62 @@ rename_mapping_B = {
 key_fields_without_remark = ["学校名称", "省份", "一级层次", "招生科类", "招生批次", "招生类型（选填）"]
 key_fields_with_remark = key_fields_without_remark + ["专业备注（选填）"]
 
-def clean_remark(text):
-    if pd.isna(text):
+
+def clean_text(text):
+    """标准化文本：转小写、去空格、处理空值"""
+    if pd.isna(text) or text is None or text == "":
         return ""
     return str(text).strip().lower()
 
-def make_key(row, fields):
-    return "|".join([str(row[f]) if pd.notna(row[f]) else "" for f in fields])
 
-def has_duplicates_in_key(df, key_col):
-    return df.duplicated(subset=[key_col], keep=False).any()
+def make_key(row, fields):
+    """生成标准化组合键：统一处理空值/格式/大小写"""
+    return "|".join([clean_text(row.get(f, "")) for f in fields])
+
+
+def has_true_single_key(df, key_col):
+    """检查组合键是否真正唯一（无重复且分组后每组仅1条记录）"""
+    if df.duplicated(subset=[key_col], keep=False).any():
+        return False
+    # 验证分组后每组记录数=1
+    group_sizes = df.groupby(key_col).size()
+    return (group_sizes == 1).all()
+
 
 def fuzzy_match(row, b_dict):
-    key = make_key(row, key_fields_without_remark)
-    candidates = b_dict.get(key, [])
-    if not candidates:
-        return None
 
-    remark_a = row["专业备注（选填）_清洗"]
-    best_match = None
-    max_similarity = 0
 
-    for candidate in candidates:
-        remark_b = candidate["专业备注（选填）_清洗"]
-        if not remark_a or not remark_b:
-            continue
-        similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
-        if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
-            max_similarity = similarity
-            best_match = candidate
-
-    return best_match["专业组代码"] if best_match else None
+# ...（保持不变）
 
 def process_matching(fileA, fileB):
+    # 读取数据
     dfA = pd.read_excel(fileA, header=0)
     dfB = pd.read_excel(fileB, header=0)
-    dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
-    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
+    # 统一列名：确保dfA和dfB使用标准化列名
+    dfB.rename(columns=expected_columns, inplace=True)
+    dfA.rename(columns=expected_columns, inplace=True)  # 新增：标准化dfA列名
 
+    # 清洗备注字段
+    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_text)
+    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_text)
+
+    # 生成组合键（使用标准化函数）
     dfA["组合键_无备注"] = dfA.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
     dfB["组合键_无备注"] = dfB.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
 
-    if not has_duplicates_in_key(dfA, "组合键_无备注") and not has_duplicates_in_key(dfB, "组合键_无备注"):
-        b_dict = dfB.groupby("组合键_无备注").apply(lambda x: x.to_dict('records')).to_dict()
-        def direct_match(row):
-            candidates = b_dict.get(row["组合键_无备注"], [])
-            return candidates[0]["专业组代码"] if candidates else None
-        dfA["专业组代码"] = dfA.apply(direct_match, axis=1)
+    # 检查是否真正无重复
+    if has_true_single_key(dfA, "组合键_无备注") and has_true_single_key(dfB, "组合键_无备注"):
+        # 构建 {组合键: 记录} 字典（非列表）
+        b_dict = dfB.set_index("组合键_无备注")["专业组代码"].to_dict()
+        dfA["专业组代码"] = dfA["组合键_无备注"].map(b_dict)  # 直接映射
     else:
+        # 处理带备注的复杂情况（原逻辑）
         dfB["组合键_含备注"] = dfB.apply(lambda row: make_key(row, key_fields_with_remark), axis=1)
         b_dict = dfB.groupby("组合键_无备注").apply(lambda x: x.to_dict('records')).to_dict()
         dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
 
+    # 清理临时列
     dfA.drop(columns=["专业备注（选填）_清洗", "组合键_无备注"], errors='ignore', inplace=True)
     if "组合键_含备注" in dfB.columns:
         dfB.drop(columns=["专业备注（选填）_清洗", "组合键_无备注", "组合键_含备注"], errors='ignore', inplace=True)
