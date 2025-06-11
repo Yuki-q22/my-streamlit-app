@@ -11,7 +11,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.styles import numbers
 import base64
 import sys
-
+from io import BytesIO
 
 # ============================
 # 初始化设置
@@ -643,8 +643,12 @@ def process_segmentation_file(file_path):
 # 配置参数
 SIMILARITY_THRESHOLD = 0.5
 
-# 表B列名 → 统一标准列名
-rename_mapping_B_to_A = {
+tableA_fields = [
+    "学校名称", "省份", "招生专业", "专业备注（选填）",
+    "一级层次", "招生科类", "招生批次", "招生类型（选填）"
+]
+
+rename_mapping_B = {
     "学校": "学校名称",
     "省份": "省份",
     "层次": "一级层次",
@@ -655,95 +659,35 @@ rename_mapping_B_to_A = {
     "备注": "专业备注（选填）"
 }
 
-# 关键匹配字段（无备注和含备注）
-key_fields_without_remark = ["学校名称", "省份", "一级层次", "招生科类", "招生批次", "招生类型（选填）"]
-key_fields_with_remark = key_fields_without_remark + ["专业备注（选填）"]
-
-def clean_text(text):
-    """标准化文本：转小写、去所有空白字符、空值处理"""
-    if pd.isna(text) or text is None or text == "":
+def clean_remark(text):
+    if pd.isna(text):
         return ""
-    text = str(text).lower()
-    text = re.sub(r"\s+", "", text)
-    return text
-
-def make_key(row, fields):
-    """生成组合键"""
-    return "|".join([row.get(f, "") for f in fields])
-
-def has_true_single_key(df, key_col):
-    """判断组合键是否唯一无重复"""
-    if df.duplicated(subset=[key_col], keep=False).any():
-        return False
-    group_sizes = df.groupby(key_col).size()
-    return (group_sizes == 1).all()
+    return str(text).strip().lower()
 
 def fuzzy_match(row, b_dict):
-    key = make_key(row, key_fields_without_remark)
+    key = "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"])
     candidates = b_dict.get(key, [])
     if not candidates:
         return None
-
-    remark_a = row.get("专业备注（选填）", "")
+    remark_a = row["专业备注（选填）_清洗"]
     best_match = None
     max_similarity = 0
-
     for candidate in candidates:
-        remark_b = candidate.get("专业备注（选填）", "")
-        if not remark_a or not remark_b:
-            continue
+        remark_b = candidate["专业备注（选填）_清洗"]
         similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
         if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
             max_similarity = similarity
             best_match = candidate
+    return best_match["专业组代码"] if best_match else None
 
-    return best_match.get("专业组代码") if best_match else None
-
-def process_matching(fileA, fileB):
-    # 读取数据
-    dfA = pd.read_excel(fileA, header=0)
-    dfB = pd.read_excel(fileB, header=0)
-
-    # 清洗列名空白
-    dfA.columns = dfA.columns.str.strip()
-    dfB.columns = dfB.columns.str.strip()
-
-    # 统一列名：对dfB重命名，dfA假设原本就是标准名，如果不是请类似处理
-    dfB.rename(columns=rename_mapping_B_to_A, inplace=True)
-
-    # 保留关键字段，忽略顺序，防止字段多余或缺失导致错误
-    fields_needed = key_fields_with_remark + ["专业组代码"]
-    dfA = dfA.loc[:, [f for f in fields_needed if f in dfA.columns]]
-    dfB = dfB.loc[:, [f for f in fields_needed if f in dfB.columns]]
-
-    # 清洗字段（所有关键字段统一清洗）
-    for col in fields_needed:
-        if col in dfA.columns:
-            dfA[col] = dfA[col].apply(clean_text)
-        if col in dfB.columns:
-            dfB[col] = dfB[col].apply(clean_text)
-
-    # 生成无备注组合键
-    dfA["组合键_无备注"] = dfA.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
-    dfB["组合键_无备注"] = dfB.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
-
-    # 先尝试无备注唯一键匹配
-    if has_true_single_key(dfA, "组合键_无备注") and has_true_single_key(dfB, "组合键_无备注"):
-        b_dict = dfB.set_index("组合键_无备注")["专业组代码"].to_dict()
-        dfA["专业组代码"] = dfA["组合键_无备注"].map(b_dict)
-    else:
-        # 复杂情况，带备注模糊匹配
-        dfB["组合键_含备注"] = dfB.apply(lambda row: make_key(row, key_fields_with_remark), axis=1)
-        # 先分组按无备注组合键，聚合备注和代码列表
-        b_dict = dfB.groupby("组合键_无备注").apply(
-            lambda x: x[["专业备注（选填）", "专业组代码"]].to_dict('records')
-        ).to_dict()
-        dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
-
-    # 清理临时列
-    dfA.drop(columns=["组合键_无备注"], inplace=True, errors='ignore')
-    dfB.drop(columns=["组合键_无备注", "组合键_含备注"], inplace=True, errors='ignore')
-
+def process_data(dfA, dfB):
+    dfB.rename(columns=rename_mapping_B, inplace=True)
+    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
+    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
+    dfB["组合键"] = dfB[tableA_fields].apply(
+        lambda row: "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"]), axis=1)
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
+    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
     return dfA
 
 
@@ -965,56 +909,63 @@ with tab3:
 with tab4:
     st.header("专业组代码匹配（测试！）")
 
-    # 文件上传
-    uploaded_file_a = st.file_uploader("上传专业分模板", type=["xlsx"], key="match_file_a")
-    uploaded_file_b = st.file_uploader("上传库中导出招生计划", type=["xlsx"], key="match_file_b")
+    uploaded_fileA = st.file_uploader("上传表A（专业分模板.xlsx）", type=["xls", "xlsx"], key="fileA")
+    uploaded_fileB = st.file_uploader("上传表B（招生计划数据导出.xlsx）", type=["xls", "xlsx"], key="fileB")
 
-    if uploaded_file_a and uploaded_file_b:
-        st.success(f"已上传两个文件：{uploaded_file_a.name} 与 {uploaded_file_b.name}")
+    if uploaded_fileA and uploaded_fileB:
+        st.success(f"已选择文件：{uploaded_fileA.name} 和 {uploaded_fileB.name}")
 
-        # 显示处理进度
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("准备处理...")
+        status_text.text("等待开始处理...")
 
-        # 处理按钮
         if st.button("开始数据处理", key="start_match"):
             try:
-                # 保存上传文件
-                temp_a = "temp_match_a.xlsx"
-                temp_b = "temp_match_b.xlsx"
-                with open(temp_a, "wb") as f:
-                    f.write(uploaded_file_a.getbuffer())
-                with open(temp_b, "wb") as f:
-                    f.write(uploaded_file_b.getbuffer())
+                # 保存临时文件
+                temp_fileA = "tempA.xlsx"
+                temp_fileB = "tempB.xlsx"
+                with open(temp_fileA, "wb") as f:
+                    f.write(uploaded_fileA.getbuffer())
+                with open(temp_fileB, "wb") as f:
+                    f.write(uploaded_fileB.getbuffer())
 
-                # 模拟处理过程，替换为你实际的匹配函数
-                for percent in range(0, 101, 10):
-                    progress_bar.progress(percent)
-                    status_text.text(f"处理中... {percent}%")
+                status_text.text("读取文件...")
+                progress_bar.progress(10)
 
-                    if percent == 100:
-                        output_path = "match_result.xlsx"
-                        # 调用你写好的数据处理函数
-                        df = process_matching(temp_a, temp_b)
-                        df.to_excel(output_path, index=False)
+                dfA = pd.read_excel(temp_fileA, header=2)
+                dfB = pd.read_excel(temp_fileB)
 
-                status_text.text("处理完成！")
-                st.balloons()
+                status_text.text("开始处理数据...")
+                for percent_complete in range(20, 101, 20):
+                    progress_bar.progress(percent_complete)
+                    # 模拟处理时间，如果不需要可以去掉
+                    # time.sleep(0.2)
 
-                # 提供下载链接
-                with open(output_path, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode()
-                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="专业组代码匹配结果.xlsx">📥 点击下载结果</a>'
-                    st.markdown(href, unsafe_allow_html=True)
+                result_df = process_data(dfA, dfB)
+
+                status_text.text("处理完成！准备导出...")
+                progress_bar.progress(100)
+
+                # 导出结果到内存
+                output = BytesIO()
+                result_df.to_excel(output, index=False)
+                output.seek(0)
+
+                b64 = base64.b64encode(output.read()).decode()
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="匹配结果.xlsx">点击下载匹配结果</a>'
+                st.markdown(href, unsafe_allow_html=True)
 
                 # 清理临时文件
-                os.remove(temp_a)
-                os.remove(temp_b)
-                os.remove(output_path)
+                os.remove(temp_fileA)
+                os.remove(temp_fileB)
+
+                status_text.text("已完成，结果可下载。")
+                st.balloons()
 
             except Exception as e:
-                st.error(f"处理过程中发生错误: {str(e)}")
+                st.error(f"处理错误：{e}")
+    else:
+        st.info("请先上传两个Excel文件")
 
 
 
