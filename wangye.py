@@ -11,6 +11,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.styles import numbers
 import base64
 import sys
+from io import BytesIO
 
 
 # ============================
@@ -637,6 +638,82 @@ def process_segmentation_file(file_path):
     return output_path
 
 # ============================
+# 专业组代码匹配
+# ============================
+# 配置参数
+SIMILARITY_THRESHOLD = 0.5  # 相似度阈值
+
+# -------------------------------
+# 字段映射
+tableA_fields = [
+    "学校名称", "省份", "招生专业", "专业备注（选填）",
+    "一级层次", "招生科类", "招生批次", "招生类型（选填）"
+]
+
+rename_mapping_B = {
+    "学校": "学校名称",
+    "省份": "省份",
+    "层次": "一级层次",
+    "科类": "招生科类",
+    "批次": "招生批次",
+    "招生类型": "招生类型（选填）",
+    "专业": "招生专业",
+    "备注": "专业备注（选填）"
+}
+
+
+# -------------------------------
+# 清洗备注字段
+def clean_remark(text):
+    if pd.isna(text):
+        return ""
+    return str(text).strip().lower()
+
+
+# -------------------------------
+# 模糊匹配函数
+def fuzzy_match(row, b_dict):
+    key = "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"])
+    candidates = b_dict.get(key, [])
+    if not candidates:
+        return None
+
+    remark_a = row["专业备注（选填）_清洗"]
+    best_match = None
+    max_similarity = 0
+
+    for candidate in candidates:
+        remark_b = candidate["专业备注（选填）_清洗"]
+        similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
+        if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
+            max_similarity = similarity
+            best_match = candidate
+
+    return best_match["专业组代码"] if best_match else None
+
+
+# -------------------------------
+# 主处理函数
+def process_matching(fileA, fileB):
+    dfA = pd.read_excel(fileA, header=2)
+    dfB = pd.read_excel(fileB)
+
+    dfB.rename(columns=rename_mapping_B, inplace=True)
+
+    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
+    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
+
+    dfB["组合键"] = dfB[tableA_fields].apply(
+        lambda row: "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"]),
+        axis=1
+    )
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
+
+    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+    return dfA
+
+
+# ============================
 # Streamlit页面布局
 # ============================
 # 页面标题
@@ -693,7 +770,7 @@ with st.expander("📢 版本更新（2025.6.6更新）", expanded=False):
     """)
 
 # 创建选项卡
-tab1, tab2, tab3 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验"])
+tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配"])
 
 # ====================== 院校分提取 ======================
 with tab1:
@@ -848,6 +925,62 @@ with tab3:
             except Exception as e:
                 st.error(f"处理过程中发生错误: {str(e)}")
 
+
+# ====================== 专业组代码匹配 ======================
+with tab4:
+    st.header("专业组代码匹配")
+
+    # 文件上传
+    uploaded_file_a = st.file_uploader("上传表A文件（专业分数据）", type=["xlsx"], key="match_file_a")
+    uploaded_file_b = st.file_uploader("上传表B文件（招生计划）", type=["xlsx"], key="match_file_b")
+
+    if uploaded_file_a and uploaded_file_b:
+        st.success(f"已上传两个文件：{uploaded_file_a.name} 与 {uploaded_file_b.name}")
+
+        # 显示处理进度
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        status_text.text("准备处理...")
+
+        # 处理按钮
+        if st.button("开始模糊匹配", key="start_match"):
+            try:
+                # 保存上传文件
+                temp_a = "temp_match_a.xlsx"
+                temp_b = "temp_match_b.xlsx"
+                with open(temp_a, "wb") as f:
+                    f.write(uploaded_file_a.getbuffer())
+                with open(temp_b, "wb") as f:
+                    f.write(uploaded_file_b.getbuffer())
+
+                # 模拟处理过程，替换为你实际的匹配函数
+                for percent in range(0, 101, 10):
+                    progress_bar.progress(percent)
+                    status_text.text(f"处理中... {percent}%")
+
+                    if percent == 100:
+                        # 替换为你的函数：process_match_files(temp_a, temp_b)
+                        output_path = "match_result.xlsx"
+                        # 示例：将文件A简单复制为结果（你应替换为匹配处理逻辑）
+                        df = pd.read_excel(temp_a)
+                        df.to_excel(output_path, index=False)
+
+                status_text.text("处理完成！")
+                st.balloons()
+
+                # 提供下载链接
+                with open(output_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode()
+                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="专业组代码匹配结果.xlsx">📥 点击下载结果</a>'
+                    st.markdown(href, unsafe_allow_html=True)
+
+                # 清理临时文件
+                os.remove(temp_a)
+                os.remove(temp_b)
+                os.remove(output_path)
+
+            except Exception as e:
+                st.error(f"处理过程中发生错误: {str(e)}")
 
 
 
