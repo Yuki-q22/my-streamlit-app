@@ -669,15 +669,26 @@ def fuzzy_match(row, b_dict):
     candidates = b_dict.get(key, [])
     if not candidates:
         return None
+
     remark_a = row["专业备注（选填）_清洗"]
     best_match = None
     max_similarity = 0
+
     for candidate in candidates:
         remark_b = candidate["专业备注（选填）_清洗"]
+
+        # 优先判断包含关系
+        if remark_a and remark_a in remark_b:
+            return candidate["专业组代码"]
+        if remark_b and remark_b in remark_a:
+            return candidate["专业组代码"]
+
+        # 计算相似度
         similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
         if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
             max_similarity = similarity
             best_match = candidate
+
     return best_match["专业组代码"] if best_match else None
 
 def process_data(dfA, dfB):
@@ -929,7 +940,7 @@ with tab3:
 
 # ====================== 专业组代码匹配 ======================
 with tab4:
-    st.header("专业组代码匹配（测试1）")
+    st.header("专业组代码匹配（测试）")
 
     uploaded_fileA = st.file_uploader("上传表A（专业分模板.xlsx）", type=["xls", "xlsx"], key="fileA")
     uploaded_fileB = st.file_uploader("上传表B（招生计划数据导出.xlsx）", type=["xls", "xlsx"], key="fileB")
