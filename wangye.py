@@ -695,34 +695,20 @@ def fuzzy_match(row, b_dict):
 # -------------------------------
 # 主处理函数
 def process_matching(fileA, fileB):
-    # 读取文件A时跳过前两行，header=2表示第三行作为标题行
-    dfA = pd.read_excel(fileA, header=2)
+    # 读取文件A：跳过前两行，第三行作为表头
+    dfA = pd.read_excel(fileA, header=2, skiprows=[0, 1])  # 跳过前两行（0和1）
 
-    # 读取文件B，header=0表示第一行作为标题行
+    # 读取文件B：第一行作为表头
     dfB = pd.read_excel(fileB, header=0)
 
-    # 重命名B的列
+    # 继续你的处理...
     dfB.rename(columns=rename_mapping_B, inplace=True)
-
-    # 清洗备注字段
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
-    # 创建组合键
-    dfB["组合键"] = dfB[tableA_fields].apply(
-        lambda row: "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"]),
-        axis=1
-    )
-    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
-
-    # 进行模糊匹配
-    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
-
-    # 删除所有可能的Unnamed列（更精确的方法）
-    dfA = dfA.loc[:, ~dfA.columns.str.contains('^Unnamed')]
-
-    # 额外处理：确保没有空列（有时Unnamed列可能不是以Unnamed开头）
-    dfA = dfA.dropna(axis=1, how='all')
+    # 删除所有可能的 Unnamed 列（更严格的方式）
+    dfA = dfA.loc[:, ~dfA.columns.str.contains('^Unnamed|^\\.')]
+    dfA = dfA.dropna(axis=1, how='all')  # 删除全空列
 
     return dfA
 
