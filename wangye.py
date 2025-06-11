@@ -688,8 +688,8 @@ def fuzzy_match(row, b_dict):
     best_match = None
     max_similarity = 0
 
-    for candidate in candidates:
-        remark_b = candidate["专业备注（选填）_清洗"]
+    for candidate in candidates:  # candidate 是字典，不要调用它
+        remark_b = candidate.get("专业备注（选填）_清洗", "")
         if not remark_a or not remark_b:
             continue
         similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
@@ -697,7 +697,7 @@ def fuzzy_match(row, b_dict):
             max_similarity = similarity
             best_match = candidate
 
-    return best_match["专业组代码"] if best_match else None
+    return best_match.get("专业组代码") if best_match else None
 
 
 def process_matching(fileA, fileB):
@@ -707,7 +707,6 @@ def process_matching(fileA, fileB):
 
     # 统一列名：确保dfA和dfB使用标准化列名
     dfB.rename(columns=rename_mapping_B_to_A, inplace=True)
-    dfA.rename(columns=expected_columns, inplace=True)  # 新增：标准化dfA列名
 
     # 清洗备注字段
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_text)
