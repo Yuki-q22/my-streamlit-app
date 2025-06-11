@@ -695,16 +695,21 @@ def fuzzy_match(row, b_dict):
 # -------------------------------
 # 主处理函数
 def process_matching(fileA, fileB):
-    # 读取文件A：跳过前3行（合并单元格+空行+年份行），第4行开始是真正的数据
-    dfA = pd.read_excel(fileA, header=2, skiprows=[0, 1, 2])  # 跳过前3行
+    # 用 openpyxl 读取文件A，跳过前3行（合并单元格+空行+年份行），第4行作为表头
+    dfA = pd.read_excel(
+        fileA,
+        engine='openpyxl',  # 强制使用 openpyxl
+        header=0,  # 表头是当前的第1行（跳过前3行后的第1行）
+        skiprows=3,  # 跳过前3行（从第4行开始读）
+    )
 
-    # 读取文件B：正常读取
+    # 读取文件B（保持原样）
     dfB = pd.read_excel(fileB, header=0)
 
     # 重命名列（确保列名对齐）
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # 强制删除所有 Unnamed 列（双重保险）
+    # 强制删除所有 Unnamed 列（保险措施）
     dfA = dfA.loc[:, ~dfA.columns.str.contains('^Unnamed|^\\.')]
 
     return dfA
