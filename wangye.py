@@ -659,18 +659,15 @@ expected_columns = {
 key_fields_without_remark = ["学校名称", "省份", "一级层次", "招生科类", "招生批次", "招生类型（选填）"]
 key_fields_with_remark = key_fields_without_remark + ["专业备注（选填）"]
 
-
 def clean_text(text):
     """标准化文本：转小写、去空格、处理空值"""
     if pd.isna(text) or text is None or text == "":
         return ""
     return str(text).strip().lower()
 
-
 def make_key(row, fields):
     """生成标准化组合键：统一处理空值/格式/大小写"""
     return "|".join([clean_text(row.get(f, "")) for f in fields])
-
 
 def has_true_single_key(df, key_col):
     """检查组合键是否真正唯一（无重复且分组后每组仅1条记录）"""
@@ -680,11 +677,27 @@ def has_true_single_key(df, key_col):
     group_sizes = df.groupby(key_col).size()
     return (group_sizes == 1).all()
 
-
 def fuzzy_match(row, b_dict):
+    key = make_key(row, key_fields_without_remark)
+    candidates = b_dict.get(key, [])
+    if not candidates:
+        return None
 
+    remark_a = row["专业备注（选填）_清洗"]
+    best_match = None
+    max_similarity = 0
 
-# ...（保持不变）
+    for candidate in candidates:
+        remark_b = candidate["专业备注（选填）_清洗"]
+        if not remark_a or not remark_b:
+            continue
+        similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
+        if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
+            max_similarity = similarity
+            best_match = candidate
+
+    return best_match["专业组代码"] if best_match else None
+
 
 def process_matching(fileA, fileB):
     # 读取数据
