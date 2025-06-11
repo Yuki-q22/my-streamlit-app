@@ -736,7 +736,9 @@ def process_matching(fileA, fileB):
     else:
         # 处理带备注的复杂情况（原逻辑）
         dfB["组合键_含备注"] = dfB.apply(lambda row: make_key(row, key_fields_with_remark), axis=1)
-        b_dict = dfB.groupby("组合键_无备注").apply(lambda x: x.to_dict('records')).to_dict()
+        b_dict = {}
+        for key, group in dfB.groupby("组合键_无备注"):
+            b_dict[key] = group.to_dict(orient='records')
         dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
 
     # 清理临时列
