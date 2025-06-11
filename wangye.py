@@ -695,20 +695,17 @@ def fuzzy_match(row, b_dict):
 # -------------------------------
 # 主处理函数
 def process_matching(fileA, fileB):
-    # 读取文件A：跳过前两行，第三行作为表头
-    dfA = pd.read_excel(fileA, header=2, skiprows=[0, 1])  # 跳过前两行（0和1）
+    # 读取文件A：跳过前3行（合并单元格+空行+年份行），第4行开始是真正的数据
+    dfA = pd.read_excel(fileA, header=2, skiprows=[0, 1, 2])  # 跳过前3行
 
-    # 读取文件B：第一行作为表头
+    # 读取文件B：正常读取
     dfB = pd.read_excel(fileB, header=0)
 
-    # 继续你的处理...
+    # 重命名列（确保列名对齐）
     dfB.rename(columns=rename_mapping_B, inplace=True)
-    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
-    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
-    # 删除所有可能的 Unnamed 列（更严格的方式）
+    # 强制删除所有 Unnamed 列（双重保险）
     dfA = dfA.loc[:, ~dfA.columns.str.contains('^Unnamed|^\\.')]
-    dfA = dfA.dropna(axis=1, how='all')  # 删除全空列
 
     return dfA
 
