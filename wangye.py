@@ -644,20 +644,8 @@ def process_segmentation_file(file_path):
 # 配置参数
 SIMILARITY_THRESHOLD = 0.5
 
-# 1. 定义表A的标准字段（匹配用字段，以表A为准）
-tableA_fields = [
-    "学校名称",         # 对应表B字段“学校”
-    "省份",
-    "招生专业",         # 对应表B字段“专业”
-    "专业备注（选填）", # 模糊匹配字段
-    "一级层次",         # 对应表B字段“层次”
-    "招生科类",         # 对应表B字段“科类”
-    "招生批次",         # 对应表B字段“批次”
-    "招生类型（选填）"  # 对应表B字段“招生类型”
-]
-
-# 2. 定义表B字段重命名映射
-rename_mapping_B = {
+# 表B列名 → 表A列名
+rename_mapping_B_to_A = {
     "学校": "学校名称",
     "省份": "省份",
     "层次": "一级层次",
@@ -667,6 +655,7 @@ rename_mapping_B = {
     "专业": "招生专业",
     "备注": "专业备注（选填）"
 }
+
 
 key_fields_without_remark = ["学校名称", "省份", "一级层次", "招生科类", "招生批次", "招生类型（选填）"]
 key_fields_with_remark = key_fields_without_remark + ["专业备注（选填）"]
@@ -717,7 +706,7 @@ def process_matching(fileA, fileB):
     dfB = pd.read_excel(fileB, header=0)
 
     # 统一列名：确保dfA和dfB使用标准化列名
-    dfB.rename(columns=expected_columns, inplace=True)
+    dfB.rename(columns=rename_mapping_B_to_A, inplace=True)
     dfA.rename(columns=expected_columns, inplace=True)  # 新增：标准化dfA列名
 
     # 清洗备注字段
@@ -736,9 +725,7 @@ def process_matching(fileA, fileB):
     else:
         # 处理带备注的复杂情况（原逻辑）
         dfB["组合键_含备注"] = dfB.apply(lambda row: make_key(row, key_fields_with_remark), axis=1)
-        b_dict = {}
-        for key, group in dfB.groupby("组合键_无备注"):
-            b_dict[key] = group.to_dict(orient='records')
+        b_dict = dfB.groupby("组合键_无备注").apply(lambda x: x.to_dict('records')).to_dict()
         dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
 
     # 清理临时列
