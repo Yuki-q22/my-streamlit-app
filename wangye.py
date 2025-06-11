@@ -640,7 +640,7 @@ def process_segmentation_file(file_path):
 # ============================
 # 专业组代码匹配
 # ============================
-# 配置参数
+# 匹配参数
 SIMILARITY_THRESHOLD = 0.5
 
 tableA_fields = [
@@ -665,7 +665,7 @@ def clean_remark(text):
     return str(text).strip().lower()
 
 def fuzzy_match(row, b_dict):
-    key = "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"])
+    key = row["组合键"]
     candidates = b_dict.get(key, [])
     if not candidates:
         return None
@@ -689,22 +689,26 @@ def process_data(dfA, dfB):
 
     # 构建组合键（不含备注）
     key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
-    dfA["组合键"] = dfA[key_fields].astype(str).agg("|".join, axis=1)
-    dfB["组合键"] = dfB[key_fields].astype(str).agg("|".join, axis=1)
+    dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(lambda x: "|".join(x.str.strip()), axis=1)
+    dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(lambda x: "|".join(x.str.strip()), axis=1)
 
-    # 判断组合键在两个表中是否唯一
-    a_unique = not dfA["组合键"].duplicated().any()
-    b_unique = not dfB["组合键"].duplicated().any()
+    # 构建完整键（包含备注）用于模糊匹配备用
+    dfB["完整键"] = dfB[tableA_fields].fillna("").astype(str).apply(lambda x: "|".join(x.str.strip()), axis=1)
 
-    if a_unique and b_unique:
-        # 可以直接匹配
-        mapping = dfB.set_index("组合键")["专业组代码"].to_dict()
-        dfA["专业组代码"] = dfA["组合键"].map(mapping)
-    else:
-        # 启用模糊匹配
-        dfB["完整键"] = dfB[tableA_fields].astype(str).agg("|".join, axis=1)
-        b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
-        dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+    # 构建组合键映射表（无备注字段，值为专业组代码）
+    mapping = dfB.drop_duplicates("组合键").set_index("组合键")["专业组代码"].to_dict()
+
+    # 构建模糊匹配用的字典：组合键 → dfB记录列表
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+
+    def get_code(row):
+        key = row["组合键"]
+        if key in mapping and len(b_dict.get(key, [])) == 1:
+            return mapping[key]  # 唯一可精确匹配
+        else:
+            return fuzzy_match(row, b_dict)
+
+    dfA["专业组代码"] = dfA.apply(get_code, axis=1)
 
     return dfA
 
@@ -970,7 +974,7 @@ with tab4:
                 output.seek(0)
 
                 b64 = base64.b64encode(output.read()).decode()
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="匹配结果.xlsx">点击下载匹配结果</a>'
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="专业组代码匹配结果.xlsx">点击下载匹配结果</a>'
                 st.markdown(href, unsafe_allow_html=True)
 
                 # 清理临时文件
