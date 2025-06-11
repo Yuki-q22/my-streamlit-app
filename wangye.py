@@ -696,13 +696,14 @@ def fuzzy_match(row, b_dict):
         empty_remarks = [c for c in candidates if not c["专业备注（选填）_清洗"]]
         if empty_remarks:
             return empty_remarks[0]["专业组代码"]
-        # 如果没有完全空白的备注，则选择第一个
+        # 如果没有完全空白的备注，则选择第一个（或根据其他逻辑）
         return candidates[0]["专业组代码"]
 
     for candidate in candidates:
         remark_b = candidate["专业备注（选填）_清洗"]
 
         # 1. 优先判断核心关键词匹配
+        # 提取A备注中的关键词（按空格分割）
         keywords_a = set(remark_a.split())
 
         # 检查A的所有关键词是否都出现在B备注中
@@ -733,40 +734,40 @@ def fuzzy_match(row, b_dict):
 
 
 def process_data(dfA, dfB):
-    # 确保导入所需库
-    import pandas as pd
-    import re
 
-    # 创建副本避免修改原始数据
-    dfA_processed = dfA.copy()
-    dfB_processed = dfB.copy()
+    dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    dfB_processed.rename(columns=rename_mapping_B, inplace=True)
-
-    # 清洗备注字段
-    dfA_processed["专业备注（选填）_清洗"] = dfA_processed["专业备注（选填）"].apply(clean_remark)
-    dfB_processed["专业备注（选填）_清洗"] = dfB_processed["专业备注（选填）"].apply(clean_remark)
+    # 清洗备注字段（使用优化后的清洗函数）
+    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
+    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
     # 构建组合键（不含备注）
     key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
-    dfA_processed["组合键"] = dfA_processed[key_fields].fillna("").astype(str).apply(
+    dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(
         lambda x: "|".join([str(i).strip() for i in x]), axis=1)
-    dfB_processed["组合键"] = dfB_processed[key_fields].fillna("").astype(str).apply(
+    dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(
         lambda x: "|".join([str(i).strip() for i in x]), axis=1)
 
-    # 构建B表字典
-    b_dict = dfB_processed.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+    # 构建B表字典：组合键 → 记录列表
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
 
-    # 执行匹配
-    dfA_processed["专业组代码"] = dfA_processed.apply(
-        lambda row: (
-            fuzzy_match(row, b_dict) if len(b_dict.get(row["组合键"], [])) > 1
-            else b_dict.get(row["组合键"], [{}])[0].get("专业组代码")
-        ), axis=1
-    )
+    def get_code(row):
+        key = row["组合键"]
+        candidates = b_dict.get(key, [])
 
-    # 返回结果（不包含中间处理列）
-    return dfA_processed[dfA.columns.tolist() + ["专业组代码"]]
+        # 情况1：无候选记录
+        if not candidates:
+            return None
+
+        # 情况2：唯一候选记录
+        if len(candidates) == 1:
+            return candidates[0]["专业组代码"]
+
+        # 情况3：多个候选记录，使用模糊匹配
+        return fuzzy_match(row, b_dict)
+
+
+    return dfA
 
 
 
