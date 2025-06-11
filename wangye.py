@@ -710,6 +710,10 @@ def process_matching(fileA, fileB):
     b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
 
     dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+
+    # 删除所有 Unnamed 列
+    dfA = dfA.loc[:, ~dfA.columns.str.contains('^Unnamed')]
+
     return dfA
 
 
@@ -931,8 +935,8 @@ with tab4:
     st.header("专业组代码匹配（测试！）")
 
     # 文件上传
-    uploaded_file_a = st.file_uploader("上传表A文件（专业分数据）", type=["xlsx"], key="match_file_a")
-    uploaded_file_b = st.file_uploader("上传表B文件（招生计划）", type=["xlsx"], key="match_file_b")
+    uploaded_file_a = st.file_uploader("上传专业分模板", type=["xlsx"], key="match_file_a")
+    uploaded_file_b = st.file_uploader("上传库中导出招生计划", type=["xlsx"], key="match_file_b")
 
     if uploaded_file_a and uploaded_file_b:
         st.success(f"已上传两个文件：{uploaded_file_a.name} 与 {uploaded_file_b.name}")
@@ -943,7 +947,7 @@ with tab4:
         status_text.text("准备处理...")
 
         # 处理按钮
-        if st.button("开始模糊匹配", key="start_match"):
+        if st.button("开始数据处理", key="start_match"):
             try:
                 # 保存上传文件
                 temp_a = "temp_match_a.xlsx"
