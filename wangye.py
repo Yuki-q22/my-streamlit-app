@@ -766,7 +766,8 @@ def process_data(dfA, dfB):
         # 情况3：多个候选记录，使用模糊匹配
         return fuzzy_match(row, b_dict)
 
-    dfA["专业组代码"] = dfA.apply(get_code, axis=1)
+        # 只删除中间列：组合键和专业备注（选填）_清洗
+        dfA = dfA.drop(columns=["组合键", "专业备注（选填）_清洗"])
 
     return dfA
 
