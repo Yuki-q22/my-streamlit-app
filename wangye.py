@@ -682,12 +682,30 @@ def fuzzy_match(row, b_dict):
 
 def process_data(dfA, dfB):
     dfB.rename(columns=rename_mapping_B, inplace=True)
+
+    # 清洗备注字段
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
-    dfB["组合键"] = dfB[tableA_fields].apply(
-        lambda row: "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"]), axis=1)
-    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
-    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+
+    # 构建组合键（不含备注）
+    key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
+    dfA["组合键"] = dfA[key_fields].astype(str).agg("|".join, axis=1)
+    dfB["组合键"] = dfB[key_fields].astype(str).agg("|".join, axis=1)
+
+    # 判断组合键在两个表中是否唯一
+    a_unique = not dfA["组合键"].duplicated().any()
+    b_unique = not dfB["组合键"].duplicated().any()
+
+    if a_unique and b_unique:
+        # 可以直接匹配
+        mapping = dfB.set_index("组合键")["专业组代码"].to_dict()
+        dfA["专业组代码"] = dfA["组合键"].map(mapping)
+    else:
+        # 启用模糊匹配
+        dfB["完整键"] = dfB[tableA_fields].astype(str).agg("|".join, axis=1)
+        b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+        dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+
     return dfA
 
 
