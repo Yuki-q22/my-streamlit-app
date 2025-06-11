@@ -11,7 +11,6 @@ from openpyxl.styles import PatternFill
 from openpyxl.styles import numbers
 import base64
 import sys
-from io import BytesIO
 
 
 # ============================
@@ -705,13 +704,17 @@ def process_matching(fileA, fileB):
     dfA = pd.read_excel(fileA, header=0)
     dfB = pd.read_excel(fileB, header=0)
 
+    # 清洗列名空白
+    dfA.columns = dfA.columns.str.strip()
+    dfB.columns = dfB.columns.str.strip()
+
     # 统一列名：对dfB重命名，dfA假设原本就是标准名，如果不是请类似处理
     dfB.rename(columns=rename_mapping_B_to_A, inplace=True)
 
     # 保留关键字段，忽略顺序，防止字段多余或缺失导致错误
-    fields_needed = [f for f in key_fields_with_remark if (f in dfA.columns or f in dfB.columns)]
-    dfA = dfA.loc[:, [f for f in key_fields_with_remark if f in dfA.columns]]
-    dfB = dfB.loc[:, [f for f in key_fields_with_remark if f in dfB.columns]]
+    fields_needed = key_fields_with_remark + ["专业组代码"]
+    dfA = dfA.loc[:, [f for f in fields_needed if f in dfA.columns]]
+    dfB = dfB.loc[:, [f for f in fields_needed if f in dfB.columns]]
 
     # 清洗字段（所有关键字段统一清洗）
     for col in fields_needed:
