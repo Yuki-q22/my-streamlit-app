@@ -644,7 +644,7 @@ def process_segmentation_file(file_path):
 # 配置参数
 SIMILARITY_THRESHOLD = 0.5
 
-# 表B列名 → 表A列名
+# 表B列名 → 统一标准列名
 rename_mapping_B_to_A = {
     "学校": "学校名称",
     "省份": "省份",
@@ -656,26 +656,26 @@ rename_mapping_B_to_A = {
     "备注": "专业备注（选填）"
 }
 
-
+# 关键匹配字段（无备注和含备注）
 key_fields_without_remark = ["学校名称", "省份", "一级层次", "招生科类", "招生批次", "招生类型（选填）"]
 key_fields_with_remark = key_fields_without_remark + ["专业备注（选填）"]
 
 def clean_text(text):
+    """标准化文本：转小写、去所有空白字符、空值处理"""
     if pd.isna(text) or text is None or text == "":
         return ""
-    text = str(text).lower()              # 转小写
-    text = re.sub(r"\s+", "", text)       # 去除所有空白字符（空格、制表符、换行等）
+    text = str(text).lower()
+    text = re.sub(r"\s+", "", text)
     return text
 
 def make_key(row, fields):
-    """生成标准化组合键：统一处理空值/格式/大小写"""
-    return "|".join([clean_text(row.get(f, "")) for f in fields])
+    """生成组合键"""
+    return "|".join([row.get(f, "") for f in fields])
 
 def has_true_single_key(df, key_col):
-    """检查组合键是否真正唯一（无重复且分组后每组仅1条记录）"""
+    """判断组合键是否唯一无重复"""
     if df.duplicated(subset=[key_col], keep=False).any():
         return False
-    # 验证分组后每组记录数=1
     group_sizes = df.groupby(key_col).size()
     return (group_sizes == 1).all()
 
@@ -685,12 +685,12 @@ def fuzzy_match(row, b_dict):
     if not candidates:
         return None
 
-    remark_a = row["专业备注（选填）_清洗"]
+    remark_a = row.get("专业备注（选填）", "")
     best_match = None
     max_similarity = 0
 
-    for candidate in candidates:  # candidate 是字典，不要调用它
-        remark_b = candidate.get("专业备注（选填）_清洗", "")
+    for candidate in candidates:
+        remark_b = candidate.get("专业备注（选填）", "")
         if not remark_a or not remark_b:
             continue
         similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
@@ -700,38 +700,44 @@ def fuzzy_match(row, b_dict):
 
     return best_match.get("专业组代码") if best_match else None
 
-
 def process_matching(fileA, fileB):
     # 读取数据
     dfA = pd.read_excel(fileA, header=0)
     dfB = pd.read_excel(fileB, header=0)
 
-    # 统一列名：确保dfA和dfB使用标准化列名
+    # 统一列名：对dfB重命名，dfA假设原本就是标准名，如果不是请类似处理
     dfB.rename(columns=rename_mapping_B_to_A, inplace=True)
 
-    # 清洗备注字段
-    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_text)
-    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_text)
+    # 保留关键字段，忽略顺序，防止字段多余或缺失导致错误
+    fields_needed = [f for f in key_fields_with_remark if (f in dfA.columns or f in dfB.columns)]
+    dfA = dfA.loc[:, [f for f in key_fields_with_remark if f in dfA.columns]]
+    dfB = dfB.loc[:, [f for f in key_fields_with_remark if f in dfB.columns]]
 
-    # 生成组合键（使用标准化函数）
+    # 清洗字段（所有关键字段统一清洗）
+    for col in fields_needed:
+        if col in dfA.columns:
+            dfA[col] = dfA[col].apply(clean_text)
+        if col in dfB.columns:
+            dfB[col] = dfB[col].apply(clean_text)
+
+    # 生成无备注组合键
     dfA["组合键_无备注"] = dfA.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
     dfB["组合键_无备注"] = dfB.apply(lambda row: make_key(row, key_fields_without_remark), axis=1)
 
-    # 检查是否真正无重复
+    # 先尝试无备注唯一键匹配
     if has_true_single_key(dfA, "组合键_无备注") and has_true_single_key(dfB, "组合键_无备注"):
         b_dict = dfB.set_index("组合键_无备注")["专业组代码"].to_dict()
         dfA["专业组代码"] = dfA["组合键_无备注"].map(b_dict)
-
     else:
-        # 处理带备注的复杂情况（原逻辑）
+        # 复杂情况，带备注模糊匹配
         dfB["组合键_含备注"] = dfB.apply(lambda row: make_key(row, key_fields_with_remark), axis=1)
-        b_dict = dfB.groupby("组合键_无备注")[["专业备注（选填）_清洗", "专业组代码"]].apply(lambda x: x.to_dict('records')).to_dict()
+        # 先分组按无备注组合键，聚合备注和代码列表
+        b_dict = dfB.groupby("组合键_无备注")[[ "专业备注（选填）", "专业组代码"]].apply(lambda x: x.to_dict('records')).to_dict()
         dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
 
     # 清理临时列
-    dfA.drop(columns=["专业备注（选填）_清洗", "组合键_无备注"], errors='ignore', inplace=True)
-    if "组合键_含备注" in dfB.columns:
-        dfB.drop(columns=["专业备注（选填）_清洗", "组合键_无备注", "组合键_含备注"], errors='ignore', inplace=True)
+    dfA.drop(columns=["组合键_无备注"], inplace=True, errors='ignore')
+    dfB.drop(columns=["组合键_无备注", "组合键_含备注"], inplace=True, errors='ignore')
 
     return dfA
 
