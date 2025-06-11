@@ -695,22 +695,31 @@ def fuzzy_match(row, b_dict):
 # -------------------------------
 # 主处理函数
 def process_matching(fileA, fileB):
-    # 用 openpyxl 读取文件A，跳过前3行（合并单元格+空行+年份行），第4行作为表头
-    dfA = pd.read_excel(
-        fileA,
-        engine='openpyxl',  # 强制使用 openpyxl
-        header=0,  # 表头是当前的第1行（跳过前3行后的第1行）
-        skiprows=3,  # 跳过前3行（从第4行开始读）
-    )
+    # 读取文件A（第一行已经是表头，无需跳过行）
+    dfA = pd.read_excel(fileA, header=0)
 
-    # 读取文件B（保持原样）
+    # 读取文件B（第一行是表头）
     dfB = pd.read_excel(fileB, header=0)
 
-    # 重命名列（确保列名对齐）
+    # 重命名B的列
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # 强制删除所有 Unnamed 列（保险措施）
-    dfA = dfA.loc[:, ~dfA.columns.str.contains('^Unnamed|^\\.')]
+    # 清洗备注字段
+    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
+    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
+
+    # 创建组合键
+    dfB["组合键"] = dfB[tableA_fields].apply(
+        lambda row: "|".join([str(row[field]) for field in tableA_fields if field != "专业备注（选填）"]),
+        axis=1
+    )
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict('records')).to_dict()
+
+    # 模糊匹配
+    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+
+    # 删除所有可能的空列（保险措施）
+    dfA = dfA.dropna(axis=1, how='all')
 
     return dfA
 
