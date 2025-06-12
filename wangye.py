@@ -11,7 +11,7 @@ from openpyxl.styles import numbers
 import base64
 import sys
 from io import BytesIO
-import pycorrector
+
 
 # ============================
 # 初始化设置
@@ -28,10 +28,10 @@ st.set_page_config(
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("启动数据处理工具。")
 
+
 # ============================
 # 学业桥数据处理相关工具函数
 # ============================
-
 
 # ======== 路径兼容函数 =========
 def resource_path(relative_path):
@@ -40,24 +40,28 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
+
 # ======== 加载学校数据 =========
 try:
     school_data_path = resource_path("school_data.xlsx")
     school_df = pd.read_excel(school_data_path)
     VALID_SCHOOL_NAMES = set(school_df['学校名称'].dropna().str.strip())
+    logging.info(f"成功加载 {len(VALID_SCHOOL_NAMES)} 个有效学校名称")
 except Exception as e:
     logging.error(f"读取 school_data.xlsx 出错：{e}")
     VALID_SCHOOL_NAMES = set()
-
+    st.warning("学校数据加载失败，学校名称检查功能将不可用")
 
 # ======== 加载招生专业数据 =========
 try:
     major_data_path = resource_path("招生专业.xlsx")
     major_df = pd.read_excel(major_data_path)
     VALID_MAJOR_COMBOS = set(major_df['招生专业'].dropna().astype(str).str.strip())
+    logging.info(f"成功加载 {len(VALID_MAJOR_COMBOS)} 个有效专业组合")
 except Exception as e:
     logging.error(f"读取 招生专业.xlsx 出错：{e}")
     VALID_MAJOR_COMBOS = set()
+    st.warning("专业数据加载失败，专业匹配功能将不可用")
 
 
 def check_school_name(name):
@@ -65,12 +69,12 @@ def check_school_name(name):
         return '学校名称为空'
     return '匹配' if name.strip() in VALID_SCHOOL_NAMES else '不匹配'
 
-def check_major_combo(major, level):
-    combo = f"{str(major).strip()}{str(level).strip()}"
-    if not major or not level:
-        return "数据缺失"
-    return "匹配" if combo in VALID_MAJOR_COMBOS else "不匹配"
 
+def check_major_combo(major, level):
+    if pd.isna(major) or pd.isna(level):
+        return "数据缺失"
+    combo = f"{str(major).strip()}{str(level).strip()}"
+    return "匹配" if combo in VALID_MAJOR_COMBOS else "不匹配"
 
 
 CUSTOM_WHITELIST = {
@@ -121,7 +125,7 @@ def similar(a, b):
 
 
 def normalize_brackets(text):
-    """统一各种括号为中文括号并处理不完整括号（书名号不补全，只替换）"""
+    """统一各种括号为中文括号并处理不完整括号"""
     if pd.isna(text) or not str(text).strip():
         return text
     text = str(text).strip()
@@ -132,7 +136,7 @@ def normalize_brackets(text):
     text = re.sub(r'[<《]', '（', text)  # 左书名号替换为左括号
     text = re.sub(r'[>》]', '）', text)  # 右书名号替换为右括号
 
-    # 补全普通括号（不包括书名号）
+    # 补全普通括号
     if '（' in text and '）' not in text:
         text += '）'
     if '）' in text and '（' not in text:
@@ -142,6 +146,7 @@ def normalize_brackets(text):
     text = REGEX_PATTERNS['consecutive_right'].sub('）', text)
 
     return text
+
 
 def clean_outer_punctuation(text):
     """清理最外层括号外的标点符号"""
@@ -159,12 +164,9 @@ def clean_outer_punctuation(text):
     return ''.join(cleaned_parts)
 
 
-
-
 def check_score_consistency(row):
     """检查分数一致性：最高分 >= 平均分 >= 最低分"""
     issues = []
-
     try:
         max_score = float(row['最高分']) if pd.notna(row['最高分']) else None
         avg_score = float(row['平均分']) if pd.notna(row['平均分']) else None
@@ -179,30 +181,27 @@ def check_score_consistency(row):
         if avg_score is not None and min_score is not None and avg_score < min_score:
             issues.append(f"平均分({avg_score}) < 最低分({min_score})")
 
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
         issues.append(f"分数格式错误: {str(e)}")
 
     return '；'.join(issues) if issues else '无问题'
-
-def check_major_combo(major, level):
-    combo = f"{str(major).strip()}{str(level).strip()}"
-    if not major or not level:
-        return "数据缺失"
-    return "匹配" if combo in VALID_MAJOR_COMBOS else "不匹配"
 
 
 def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
+
     # 1. 括号规范化
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
     original = text
     issues = []
+
     # 白名单跳过
     if text in CUSTOM_WHITELIST:
         return text, []
-    # 括号匹配补全 & 嵌套、重复处理 保持原有逻辑
+
+    # 括号匹配补全
     left, right = text.count('（'), text.count('）')
     if left != right:
         if left > right:
@@ -211,23 +210,34 @@ def analyze_and_fix(text):
         else:
             text = '（' * (right - left) + text
             issues.append(f"补充缺失左括号 {right - left} 个")
-    text2 = re.sub(r'（（(.*?)））', r'（\1）', text)
+
+    # 处理嵌套括号
+    text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
     if text2 != text:
         issues.append("存在嵌套括号")
     text = text2
+
+    # 处理重复括号内容
     text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
     if n > 0:
         issues.append("存在重复括号内容")
-    # 括号内容清洗 & 重复去除 保持原有
+
+    # 括号内容清洗
     def fix_paren(m):
         c = m.group(1)
         f = c.strip('，、,;；')
         if f != c:
-            if c[0] in '，、,;；': issues.append(f"括号内容开头多标点：'{c}'")
-            if c[-1] in '，、,;；': issues.append(f"括号内容结尾多标点：'{c}'")
+            if c[0] in '，、,;；':
+                issues.append(f"括号内容开头多标点：'{c}'")
+            if c[-1] in '，、,;；':
+                issues.append(f"括号内容结尾多标点：'{c}'")
         return f'（{f}）'
+
     text = re.sub(r'（(.*?)）', fix_paren, text)
+
+    # 括号内去重
     seen = set()
+
     def dedup(m):
         c = m.group(1)
         if c in seen:
@@ -235,47 +245,76 @@ def analyze_and_fix(text):
             return ''
         seen.add(c)
         return f'（{c}）'
+
     text = re.sub(r'（(.*?)）', dedup, text)
+
+    # 简化多余标点
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
+
     # 相似重复检测
     contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
     for i in range(len(contents)):
-        for j in range(i+1, len(contents)):
+        for j in range(i + 1, len(contents)):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
-    # 2. pycorrector 拼写检查
-    corrected, detail = pycorrector.corrector.correct(text)
-    if corrected != text:
-        for wrong, right, start, end in detail:
-            issues.append(f"错别字：'{wrong}'→'{right}'")
-        text = corrected
-    # 3. 规则字典补充
+
+    # 规则字典校正
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
             issues.append(f"错别字：'{typo}'→'{corr}'")
+
     return text, issues
 
 
 def process_chunk(chunk):
-    chunk['学校匹配结果'] = chunk['学校名称'].apply(check_school_name)
-    chunk['招生专业匹配结果'] = chunk.apply(lambda r: check_major_combo(r['招生专业'], r['一级层次']), axis=1)
-    chunk['备注检查结果'] = chunk['专业备注'].apply(lambda x: '；'.join(analyze_and_fix(x)[1]) if x else '无问题')
-    chunk['修改后备注'] = chunk['专业备注'].apply(lambda x: analyze_and_fix(x)[0] if x else '无问题')
-    chunk['分数检查结果'] = chunk.apply(check_score_consistency, axis=1)
-    # 选科要求
-    def proc_req(req):
-        if pd.isna(req) or not str(req).strip(): return ["", ""]
-        s = str(req).strip()
-        if "不限" in s: return ["不限科目专业组", ""]
-        if len(s) == 1: return ["单科、多科均需选考", s]
-        if "且" in s: return ["单科、多科均需选考", s.replace("且", "")]
-        if "或" in s: return ["多门选考", s.replace("或", "")]
-        return ["", ""]
-    chunk[['选科要求说明','次选']] = chunk['选科要求'].apply(lambda x: pd.Series(proc_req(x)))
+    """处理数据块"""
+    # 学校名称检查
+    if '学校名称' in chunk.columns:
+        chunk['学校匹配结果'] = chunk['学校名称'].apply(check_school_name)
+
+    # 专业匹配检查
+    if '招生专业' in chunk.columns and '一级层次' in chunk.columns:
+        chunk['招生专业匹配结果'] = chunk.apply(
+            lambda r: check_major_combo(r['招生专业'], r['一级层次']), axis=1)
+
+    # 备注处理
+    if '专业备注' in chunk.columns:
+        chunk['备注检查结果'] = chunk['专业备注'].apply(
+            lambda x: '；'.join(analyze_and_fix(x)[1]) if pd.notna(x) else '无问题')
+        chunk['修改后备注'] = chunk['专业备注'].apply(
+            lambda x: analyze_and_fix(x)[0] if pd.notna(x) else '')
+
+    # 分数检查
+    score_columns = ['最高分', '平均分', '最低分']
+    if all(col in chunk.columns for col in score_columns):
+        chunk['分数检查结果'] = chunk.apply(check_score_consistency, axis=1)
+
+    # 选科要求处理
+    if '选科要求' in chunk.columns:
+        def proc_req(req):
+            if pd.isna(req) or not str(req).strip():
+                return ["", ""]
+            s = str(req).strip()
+            if "不限" in s:
+                return ["不限科目专业组", ""]
+            if len(s) == 1:
+                return ["单科、多科均需选考", s]
+            if "且" in s:
+                return ["单科、多科均需选考", s.replace("且", "")]
+            if "或" in s:
+                return ["多门选考", s.replace("或", "")]
+            return ["", ""]
+
+        chunk[['选科要求说明', '次选']] = chunk['选科要求'].apply(
+            lambda x: pd.Series(proc_req(x)))
+
+    # 招生科类处理
     if '招生科类' in chunk.columns:
-        chunk['招生科类'] = chunk['招生科类'].replace({'物理':'物理类','历史':'历史类'})
-        chunk['首选科目'] = chunk['招生科类'].apply(lambda x: str(x)[0] if x in ['物理类','历史类'] else "")
+        chunk['招生科类'] = chunk['招生科类'].replace({'物理': '物理类', '历史': '历史类'})
+        chunk['首选科目'] = chunk['招生科类'].apply(
+            lambda x: str(x)[0] if x in ['物理类', '历史类'] else "")
+
     return chunk
 
 
