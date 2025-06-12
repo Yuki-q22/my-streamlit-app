@@ -656,13 +656,23 @@ rename_mapping_B = {
 
 
 def clean_remark(text):
+    """更彻底的备注清洗函数"""
     if pd.isna(text):
         return ""
-    return str(text).strip().lower()
 
+    # 统一转换为小写并去除首尾空格
+    cleaned = str(text).strip().lower()
 
-def generate_key(row, fields):
-    return "|".join([str(row.get(f, "")).strip() if pd.notna(row.get(f, "")) else "" for f in fields])
+    # 移除括号及其内容（保留括号内的文本）
+    cleaned = re.sub(r'[\(\)（）]', '', cleaned)
+
+    # 移除常见分隔符（保留分隔符之间的文本）
+    cleaned = re.sub(r'[;；、,:：]', ' ', cleaned)
+
+    # 合并多余空格
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+    return cleaned
 
 
 def fuzzy_match(row, b_dict):
@@ -672,43 +682,85 @@ def fuzzy_match(row, b_dict):
         return None
 
     remark_a = row["专业备注（选填）_清洗"]
+    best_match = None
+    max_similarity = 0
+
+    # 特殊处理空备注情况
+    if not remark_a:
+        # 如果A备注为空，优先选择B备注也为空的记录
+        empty_remarks = [c for c in candidates if not c["专业备注（选填）_清洗"]]
+        if empty_remarks:
+            return empty_remarks[0]["专业组代码"]
+        # 如果没有完全空白的备注，则选择第一个（或根据其他逻辑）
+        return candidates[0]["专业组代码"]
+
     for candidate in candidates:
         remark_b = candidate["专业备注（选填）_清洗"]
-        # ① 全包含判断
-        if remark_a and (remark_a in remark_b or remark_b in remark_a):
+
+        # 1. 优先判断核心关键词匹配
+        # 提取A备注中的关键词（按空格分割）
+        keywords_a = set(remark_a.split())
+
+        # 检查A的所有关键词是否都出现在B备注中
+        if keywords_a and all(kw in remark_b for kw in keywords_a):
             return candidate["专业组代码"]
-        # ② 相似度判断
-        similarity = SequenceMatcher(None, remark_a, remark_b).ratio()
-        if similarity >= SIMILARITY_THRESHOLD:
+
+        # 2. 部分包含关系（子串匹配）
+        if remark_a in remark_b:
             return candidate["专业组代码"]
-    return None
+
+        # 3. 相似度匹配（使用集合相似度，更高效）
+        set_a = set(remark_a.split())
+        set_b = set(remark_b.split())
+
+        if not set_a or not set_b:
+            similarity = 0
+        else:
+            # 使用Jaccard相似度
+            intersection = len(set_a & set_b)
+            union = len(set_a | set_b)
+            similarity = intersection / union if union > 0 else 0
+
+        if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
+            max_similarity = similarity
+            best_match = candidate
+
+    return best_match["专业组代码"] if best_match else None
+
 
 def process_data(dfA, dfB):
-    # 字段重命名
+
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # 清洗备注字段
+    # 清洗备注字段（使用优化后的清洗函数）
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
     # 构建组合键（不含备注）
-    combo_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
-    dfA["组合键"] = dfA.apply(lambda row: generate_key(row, combo_fields), axis=1)
-    dfB["组合键"] = dfB.apply(lambda row: generate_key(row, combo_fields), axis=1)
+    key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
+    dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join([str(i).strip() for i in x]), axis=1)
+    dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join([str(i).strip() for i in x]), axis=1)
 
-    # 判断两表的组合键是否均唯一（必须同时无重复，才能允许匹配）
-    duplicates_A = dfA.duplicated(subset=["组合键"], keep=False)
-    duplicates_B = dfB.duplicated(subset=["组合键"], keep=False)
+    # 构建B表字典：组合键 → 记录列表
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
 
-    # 只允许 A、B 表中该组合键都无重复的行参与匹配
-    valid_keys = set(dfA.loc[~duplicates_A, "组合键"]).intersection(dfB.loc[~duplicates_B, "组合键"])
+    def get_code(row):
+        key = row["组合键"]
+        candidates = b_dict.get(key, [])
 
-    # 构造候选池
-    b_pool = dfB[dfB["组合键"].isin(valid_keys)]
-    b_dict = b_pool.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+        # 情况1：无候选记录
+        if not candidates:
+            return None
 
-    # 匹配专业组代码
-    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict) if row["组合键"] in valid_keys else None, axis=1)
+        # 情况2：唯一候选记录
+        if len(candidates) == 1:
+            return candidates[0]["专业组代码"]
+
+        # 情况3：多个候选记录，使用模糊匹配
+        return fuzzy_match(row, b_dict)
+
 
     return dfA
 
