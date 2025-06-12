@@ -414,7 +414,7 @@ def process_score_file(uploaded_file):
         raise Exception("筛选结果为空。")
 
     selected_columns = [col for col in expected_columns
-                        if col in result.columns and col not in ['招生专业', '专业方向（选填）']]
+                        if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
     result = result[selected_columns]
 
     # 将结果写入 BytesIO 对象
