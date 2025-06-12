@@ -11,6 +11,7 @@ from openpyxl.styles import numbers
 import base64
 import sys
 from io import BytesIO
+import pycorrector
 
 # ============================
 # 初始化设置
@@ -191,7 +192,6 @@ def check_major_combo(major, level):
 
 
 def analyze_and_fix(text):
-    import pycorrector
     if pd.isna(text) or not str(text).strip():
         return text, []
     # 1. 括号规范化
