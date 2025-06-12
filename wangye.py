@@ -430,7 +430,10 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    selected_columns = [col for col in expected_columns if col in result.columns]
+    # 修改此处：从expected_columns中排除不需要的列
+    selected_columns = [col for col in expected_columns
+                        if col in result.columns
+                        and col not in ['招生专业', '专业方向（选填）']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -861,7 +864,7 @@ with st.expander("📢 版本更新（2025.6.6更新）", expanded=False):
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（未测试，不可以用！）"])
+tab1, tab2, tab3, tab4 = st.tabs(["院校分提取（修改中）", "学业桥数据处理", "一分一段校验", "专业组代码匹配（未测试，不可以用！）"])
 
 # ====================== 院校分提取 ======================
 with tab1:
