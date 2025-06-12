@@ -4,7 +4,6 @@ import os
 import logging
 import re
 from difflib import SequenceMatcher
-import jieba
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import openpyxl
 from openpyxl.styles import PatternFill
@@ -12,7 +11,6 @@ from openpyxl.styles import numbers
 import base64
 import sys
 from io import BytesIO
-import pycorrector
 
 # ============================
 # 初始化设置
@@ -193,6 +191,7 @@ def check_major_combo(major, level):
 
 
 def analyze_and_fix(text):
+    import pycorrector
     if pd.isna(text) or not str(text).strip():
         return text, []
     # 1. 括号规范化
