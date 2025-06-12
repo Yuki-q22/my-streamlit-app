@@ -222,15 +222,16 @@ def analyze_and_fix(text):
     if n > 0:
         issues.append("存在重复括号内容")
 
-    def fix_paren(match):
-        content = match.group(1)
-        fixed = content.lstrip("，、,;；").rstrip("，、,;；")
-        if fixed != content:
-            if content and content[0] in "，、,;；":
-                issues.append(f"括号内容开头多标点：'{content}'")
-            if content and content[-1] in "，、,;；":
-                issues.append(f"括号内容结尾多标点：'{content}'")
-        return f'（{fixed}）'
+    # 括号内容清洗
+    def fix_paren(m):
+        c = m.group(1)
+        f = c.strip('，、,;；')
+        if f != c:
+            if c[0] in '，、,;；':
+                issues.append(f"括号内容开头多标点：'{c}'")
+            if c[-1] in '，、,;；':
+                issues.append(f"括号内容结尾多标点：'{c}'")
+        return f'（{f}）'
 
     text = re.sub(r'（(.*?)）', fix_paren, text)
 
@@ -336,7 +337,6 @@ columns_to_convert = [
     '招生人数（选填）'
 ]
 
-
 def process_score_file(file_path):
     try:
         df = pd.read_excel(file_path, header=2, dtype={
@@ -357,10 +357,7 @@ def process_score_file(file_path):
     if missing_columns:
         raise Exception(f"文件缺少以下列：{missing_columns}")
 
-    # 转换数值类型
     df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
-    df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
-    df['平均分'] = pd.to_numeric(df['平均分'], errors='coerce')
     df['录取人数（选填）'] = pd.to_numeric(df['录取人数（选填）'], errors='coerce')
     df = df.dropna(subset=['最低分'])
 
@@ -370,43 +367,15 @@ def process_score_file(file_path):
     df['招生类型（选填）'] = df['招生类型（选填）'].replace([None], '')
 
     try:
-        group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
-        group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）']
+        group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）',
+                           '招生代码']
+        group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）', '招生代码']
 
-        # 初始化结果DataFrame
-        result_list = []
+        min_indices_code = df.groupby(group_with_code)['最低分'].idxmin()
+        min_indices_nocode = df.groupby(group_without_code)['最低分'].idxmin()
 
-        # 处理有专业组代码的情况
-        if '专业组代码' in df.columns and not df['专业组代码'].empty:
-            grouped = df[df['专业组代码'] != ''].groupby(group_with_code)
-            for name, group in grouped:
-                if not group.empty:
-                    # 找到最低分的记录
-                    min_row = group.loc[group['最低分'].idxmin()]
-                    # 找到该组的最高分
-                    max_score = group['最高分'].max()
-
-                    # 创建新行
-                    new_row = min_row.copy()
-                    new_row['最高分'] = max_score
-                    result_list.append(new_row)
-
-        # 处理无专业组代码的情况
-        grouped = df[(df['专业组代码'] == '') | (df['专业组代码'].isna())].groupby(group_without_code)
-        for name, group in grouped:
-            if not group.empty:
-                # 找到最低分的记录
-                min_row = group.loc[group['最低分'].idxmin()]
-                # 找到该组的最高分
-                max_score = group['最高分'].max()
-
-                # 创建新行
-                new_row = min_row.copy()
-                new_row['最高分'] = max_score
-                result_list.append(new_row)
-
-        # 合并结果
-        result = pd.DataFrame(result_list)
+        selected_indices = list(set(min_indices_code).union(set(min_indices_nocode)))
+        result = df.loc[selected_indices].copy()
 
         # 补充录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
@@ -428,10 +397,7 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 选择需要的列，排除不需要的列
-    selected_columns = [col for col in expected_columns
-                        if col in result.columns
-                        and col not in ['招生专业', '专业方向（选填）']]
+    selected_columns = [col for col in expected_columns if col in result.columns]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -452,8 +418,7 @@ def process_score_file(file_path):
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
                     for cell in \
-                            list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[
-                                0]:
+                    list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
@@ -818,15 +783,18 @@ with st.expander("📌 功能说明", expanded=True):
     st.markdown("""
     1. 上传的文件使用库中专业分、院校分、招生计划、一分一段的模板，直接上传即可，无需删减
     2. 备注检查中，检查出来括号有问题的内容还需要自己再过一遍；整个文件的备注需要大概看看有没有错别字
-    3. 校验一分一段时，内容不能为文本格式
+    3. 院校分在提取时会对招生代码一列进行校验，出现过销售提供的数据中【同一个学校、省份】招生代码不全的情况，提取院校分时会多提取数据，需要人工查验！
+    4. 校验一分一段时，内容不能为文本格式
     """)
 
 # 更新日志对话框
-with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
+with st.expander("📢 版本更新（2025.6.6更新）", expanded=False):
     st.markdown("""
-    ### 2025.6.12更新
-    院校分提取逻辑更新  
-      - 提取最高分时会取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分  
+    ### 2025.6.6更新
+    "一分一段数据处理"优化  
+      - 自动补充"最高分——满分"的区间（上海满分660，海南满分900）  
+      - 只有累计人数没有人数时，可计算人数，无需手动操作  
+      - 补断点的分数标注颜色，并在分数和人数校验中标注"补断点"
 
     ### 历史更新
 
@@ -856,13 +824,6 @@ with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
       - 可直接校验分数、累计人数  
       - 自动补断点  
       - 自动增加"最高分——满分"的区间（上海满分660，海南满分900）  
-      
-     ### 2025.6.6更新
-    "一分一段数据处理"优化  
-      - 自动补充"最高分——满分"的区间（上海满分660，海南满分900）  
-      - 只有累计人数没有人数时，可计算人数，无需手动操作  
-      - 补断点的分数标注颜色，并在分数和人数校验中标注"补断点"
-    
     """)
 
 # 创建选项卡
