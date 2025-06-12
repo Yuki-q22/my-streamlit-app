@@ -12,6 +12,7 @@ from openpyxl.styles import numbers
 import base64
 import sys
 from io import BytesIO
+import pycorrector
 
 # ============================
 # 初始化设置
@@ -194,138 +195,90 @@ def check_major_combo(major, level):
 def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
+    # 1. 括号规范化
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
-    original_text = text
+    original = text
     issues = []
+    # 白名单跳过
     if text in CUSTOM_WHITELIST:
-        logging.info(f"跳过白名单中的内容：{text}")
         return text, []
-    # 检查括号匹配
-    left_count = text.count('（')
-    right_count = text.count('）')
-    if left_count != right_count:
-        if left_count > right_count:
-            text += '）' * (left_count - right_count)
-            issues.append(f"补充缺失右括号 {left_count - right_count} 个")
+    # 括号匹配补全 & 嵌套、重复处理 保持原有逻辑
+    left, right = text.count('（'), text.count('）')
+    if left != right:
+        if left > right:
+            text += '）' * (left - right)
+            issues.append(f"补充缺失右括号 {left - right} 个")
         else:
-            text = '（' * (right_count - left_count) + text
-            issues.append(f"补充缺失左括号 {right_count - left_count} 个")
-    new_text = re.sub(r'（（(.*?)））', r'（\1）', text)
-    if new_text != text:
+            text = '（' * (right - left) + text
+            issues.append(f"补充缺失左括号 {right - left} 个")
+    text2 = re.sub(r'（（(.*?)））', r'（\1）', text)
+    if text2 != text:
         issues.append("存在嵌套括号")
-    text = new_text
+    text = text2
     text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
     if n > 0:
         issues.append("存在重复括号内容")
-
-    def fix_paren(match):
-        content = match.group(1)
-        fixed = content.lstrip("，、,;；").rstrip("，、,;；")
-        if fixed != content:
-            if content and content[0] in "，、,;；":
-                issues.append(f"括号内容开头多标点：'{content}'")
-            if content and content[-1] in "，、,;；":
-                issues.append(f"括号内容结尾多标点：'{content}'")
-        return f'（{fixed}）'
-
+    # 括号内容清洗 & 重复去除 保持原有
+    def fix_paren(m):
+        c = m.group(1)
+        f = c.strip('，、,;；')
+        if f != c:
+            if c[0] in '，、,;；': issues.append(f"括号内容开头多标点：'{c}'")
+            if c[-1] in '，、,;；': issues.append(f"括号内容结尾多标点：'{c}'")
+        return f'（{f}）'
     text = re.sub(r'（(.*?)）', fix_paren, text)
     seen = set()
-
-    def remove_duplicates(match):
-        content = match.group(1)
-        if content in seen:
-            issues.append(f"重复内容：{content}")
+    def dedup(m):
+        c = m.group(1)
+        if c in seen:
+            issues.append(f"重复内容：{c}")
             return ''
-        else:
-            seen.add(content)
-            return f'（{content}）'
-
-    text = re.sub(r'（(.*?)）', remove_duplicates, text)
+        seen.add(c)
+        return f'（{c}）'
+    text = re.sub(r'（(.*?)）', dedup, text)
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
-
-    paren_contents = re.findall(r'（(.*?)）', original_text)
-    unique_contents = list(dict.fromkeys(paren_contents))
-    for i in range(len(unique_contents)):
-        for j in range(i + 1, len(unique_contents)):
-            if similar(unique_contents[i], unique_contents[j]) >= 0.8:
-                issues.append(f"相似重复：'{unique_contents[i]}' 与 '{unique_contents[j]}'")
-    # 直接匹配修正已知错别字
-    for typo, correct in TYPO_DICT.items():
+    # 相似重复检测
+    contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
+    for i in range(len(contents)):
+        for j in range(i+1, len(contents)):
+            if similar(contents[i], contents[j]) >= 0.8:
+                issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
+    # 2. pycorrector 拼写检查
+    corrected, detail = pycorrector.correct(text)
+    if corrected != text:
+        for wrong, right, start, end in detail:
+            issues.append(f"错别字：'{wrong}'→'{right}'")
+        text = corrected
+    # 3. 规则字典补充
+    for typo, corr in TYPO_DICT.items():
         if typo in text:
-            text = text.replace(typo, correct)
-            issues.append(f"错别字：'{typo}'→'{correct}'")
-
-    # 利用jieba进行分词，增强错别字检测
-    tokens = jieba.lcut(text)
-    for token in tokens:
-        if len(token) < 2:
-            continue
-        for typo, correct in TYPO_DICT.items():
-            # 如果分词与错别字词条相似度很高（但并非完全一致），提示疑似错别字
-            if token != typo:
-                ratio = SequenceMatcher(None, token, typo).ratio()
-                if ratio >= 0.6:
-                    issues.append(f"疑似错别字：'{token}' 可能应为 '{correct}'")
+            text = text.replace(typo, corr)
+            issues.append(f"错别字：'{typo}'→'{corr}'")
     return text, issues
 
 
 def process_chunk(chunk):
-    # 学校匹配检查（假设列名是“学校名称”）
     chunk['学校匹配结果'] = chunk['学校名称'].apply(check_school_name)
-
-    # 招生专业匹配检查（组合：专业名称 + 科类）
-    chunk['招生专业匹配结果'] = chunk.apply(lambda row: check_major_combo(row['招生专业'], row['一级层次']), axis=1)
-
-
-    # 处理备注检查
+    chunk['招生专业匹配结果'] = chunk.apply(lambda r: check_major_combo(r['招生专业'], r['一级层次']), axis=1)
     chunk['备注检查结果'] = chunk['专业备注'].apply(lambda x: '；'.join(analyze_and_fix(x)[1]) if x else '无问题')
     chunk['修改后备注'] = chunk['专业备注'].apply(lambda x: analyze_and_fix(x)[0] if x else '无问题')
-
-    # 检查分数一致性
     chunk['分数检查结果'] = chunk.apply(check_score_consistency, axis=1)
-
-    # 处理选科要求（假设列名是“选科要求”）
-    def process_subject_requirement(requirement):
-        if pd.isna(requirement) or not str(requirement).strip():
-            return ["", ""]
-
-        requirement = str(requirement).strip()
-
-        # 处理“不限”的情况
-        if "不限" in requirement:
-            return ["不限科目专业组", ""]
-
-        # 如果是单个字，视为一个科目
-        if len(requirement) == 1:
-            return ["单科、多科均需选考", requirement]
-
-        # 处理“且”的情况
-        if "且" in requirement:
-            parts = requirement.split("且")
-            return ["单科、多科均需选考", "".join(parts).replace("且", "")]  # 去除“且”连接词
-
-        # 处理“或”的情况
-        if "或" in requirement:
-            parts = requirement.split("或")
-            return ["多门选考", "".join(parts).replace("或", "")]  # 去除“或”连接词
-
+    # 选科要求
+    def proc_req(req):
+        if pd.isna(req) or not str(req).strip(): return ["", ""]
+        s = str(req).strip()
+        if "不限" in s: return ["不限科目专业组", ""]
+        if len(s) == 1: return ["单科、多科均需选考", s]
+        if "且" in s: return ["单科、多科均需选考", s.replace("且", "")]
+        if "或" in s: return ["多门选考", s.replace("或", "")]
         return ["", ""]
-
-    # 应用处理函数到“选科要求”列，并填充到相应的列
-    chunk[['选科要求说明', '次选']] = chunk['选科要求'].apply(
-        lambda x: pd.Series(process_subject_requirement(x)))
-
-    # 检查是否有“招生科类”字段，并替换“物理”与“历史”到“物理类”和“历史类”
+    chunk[['选科要求说明','次选']] = chunk['选科要求'].apply(lambda x: pd.Series(proc_req(x)))
     if '招生科类' in chunk.columns:
-        chunk['招生科类'] = chunk['招生科类'].replace({'物理': '物理类', '历史': '历史类'})
-
-    # 检查是否有“招生科类”字段，并提取首字到“首选科目”字段
-    if '招生科类' in chunk.columns:
-        chunk['首选科目'] = chunk['招生科类'].apply(
-            lambda x: str(x)[0] if pd.notna(x) and x in ['物理类', '历史类','物理', '历史'] else "")
-
+        chunk['招生科类'] = chunk['招生科类'].replace({'物理':'物理类','历史':'历史类'})
+        chunk['首选科目'] = chunk['招生科类'].apply(lambda x: str(x)[0] if x in ['物理类','历史类'] else "")
     return chunk
+
 
 
 
@@ -638,7 +591,7 @@ def process_segmentation_file(file_path):
 
 
 # ============================
-# 专业组代码匹配（优化版）
+# 专业组代码匹配
 # ============================
 # 匹配参数
 SIMILARITY_THRESHOLD = 0.5
@@ -734,39 +687,56 @@ def fuzzy_match(row, b_dict):
 
 
 def process_data(dfA, dfB):
-
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # 清洗备注字段（使用优化后的清洗函数）
+    # 清洗备注字段
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
     # 构建组合键（不含备注）
-    key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
-    dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(
-        lambda x: "|".join([str(i).strip() for i in x]), axis=1)
-    dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(
-        lambda x: "|".join([str(i).strip() for i in x]), axis=1)
+    base_key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
+    dfA["基础组合键"] = dfA[base_key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join(i.strip() for i in x), axis=1)
+    dfB["基础组合键"] = dfB[base_key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join(i.strip() for i in x), axis=1)
 
-    # 构建B表字典：组合键 → 记录列表
-    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+    # 构建带备注组合键
+    dfA["组合键"] = dfA[tableA_fields].fillna("").astype(str).apply(
+        lambda x: "|".join(i.strip() for i in x), axis=1)
+    dfB["组合键"] = dfB[tableA_fields].fillna("").astype(str).apply(
+        lambda x: "|".join(i.strip() for i in x), axis=1)
+
+    # 查找重复项（用于判断是否可以使用基础组合键）
+    duplicated_base_A = dfA["基础组合键"].duplicated(keep=False)
+    duplicated_base_B = dfB["基础组合键"].duplicated(keep=False)
+
+    # 构建B表字典：基础组合键 → 记录列表（不含备注）
+    b_base_dict = dfB.groupby("基础组合键").apply(lambda x: x.to_dict("records")).to_dict()
+
+    # 构建B表字典：完整组合键 → 记录列表（含备注）
+    b_full_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
 
     def get_code(row):
-        key = row["组合键"]
-        candidates = b_dict.get(key, [])
+        base_key = row["基础组合键"]
+        full_key = row["组合键"]
+        is_dup = duplicated_base_A[row.name] or base_key in dfB[dfB["基础组合键"] == base_key].duplicated(keep=False).values
 
-        # 情况1：无候选记录
-        if not candidates:
-            return None
+        # 如果基础组合键无重复，则直接匹配
+        if not is_dup:
+            candidates = b_base_dict.get(base_key, [])
+            if len(candidates) == 1:
+                return candidates[0]["专业组代码"]
+            elif len(candidates) > 1:
+                # 虽然基础键唯一，但B表中多个记录 → fallback 到 fuzzy match
+                return fuzzy_match(row, b_base_dict)
+            else:
+                return None
+        else:
+            # 使用带备注组合键模糊匹配
+            return fuzzy_match(row, b_full_dict)
 
-        # 情况2：唯一候选记录
-        if len(candidates) == 1:
-            return candidates[0]["专业组代码"]
-
-        # 情况3：多个候选记录，使用模糊匹配
-        return fuzzy_match(row, b_dict)
-
-
+    # 应用匹配逻辑
+    dfA["专业组代码"] = dfA.apply(get_code, axis=1)
     return dfA
 
 
