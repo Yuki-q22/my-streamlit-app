@@ -380,14 +380,6 @@ def process_score_file(file_path):
         # 取最低分行数据
         result = df.loc[min_indices].copy()
 
-        # 在result中添加该组最高分列（放入新列，比如'组内最高分'）
-        def get_max_score(row):
-            key = tuple(row[col] for col in group_with_code)
-            return max_scores.get(key, None)
-
-        result['组内最高分'] = result.apply(get_max_score, axis=1)
-
-        # 平均分保持最低分对应的平均分，不变（已经在最低分行）
 
         # 录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
