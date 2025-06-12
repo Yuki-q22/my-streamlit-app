@@ -393,7 +393,7 @@ def process_score_file(uploaded_file):
                 result_list.append(new_row)
 
         result = pd.DataFrame(result_list)
-
+        # 录取人数分组求和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
         nocode_groups = df.groupby(group_without_code)['录取人数（选填）'].sum()
 
@@ -419,26 +419,28 @@ def process_score_file(uploaded_file):
 
     # 将结果写入 BytesIO 对象
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        result.to_excel(writer, index=False, sheet_name='Sheet1')
-        workbook = writer.book
-        worksheet = writer.sheets['Sheet1']
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            result.to_excel(writer, index=False, sheet_name='Sheet1')
+            workbook = writer.book
+            worksheet = writer.sheets['Sheet1']
 
-        for col in ['专业组代码', '专业代码', '招生代码']:
-            if col in result.columns:
-                col_idx = result.columns.get_loc(col) + 1
-                for row in range(2, len(result) + 2):
-                    worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
+            for col in ['专业组代码', '专业代码', '招生代码']:
+                if col in result.columns:
+                    col_idx = result.columns.get_loc(col) + 1
+                    for row in range(2, len(result) + 2):
+                        worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
 
-        for col in columns_to_convert:
-            if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
-                col_idx = result.columns.get_loc(col) + 1
-                for cell in \
-                        list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
-                    cell.number_format = numbers.FORMAT_TEXT
+            for col in columns_to_convert:
+                if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
+                    col_idx = result.columns.get_loc(col) + 1
+                    for cell in worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False)[0]:
+                        cell.number_format = numbers.FORMAT_TEXT
 
-    output.seek(0)
-    return output  # 返回给 Streamlit download_button 使用
+        output.seek(0)
+        return output
+    except Exception as e:
+        raise Exception(f"文件保存失败：{e}")
 
 # ============================
 # 保持文本格式
