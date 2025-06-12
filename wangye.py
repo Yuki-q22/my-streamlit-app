@@ -222,16 +222,15 @@ def analyze_and_fix(text):
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 括号内容清洗
-    def fix_paren(m):
-        c = m.group(1)
-        f = c.strip('，、,;；')
-        if f != c:
-            if c[0] in '，、,;；':
-                issues.append(f"括号内容开头多标点：'{c}'")
-            if c[-1] in '，、,;；':
-                issues.append(f"括号内容结尾多标点：'{c}'")
-        return f'（{f}）'
+    def fix_paren(match):
+        content = match.group(1)
+        fixed = content.lstrip("，、,;；").rstrip("，、,;；")
+        if fixed != content:
+            if content and content[0] in "，、,;；":
+                issues.append(f"括号内容开头多标点：'{content}'")
+            if content and content[-1] in "，、,;；":
+                issues.append(f"括号内容结尾多标点：'{content}'")
+        return f'（{fixed}）'
 
     text = re.sub(r'（(.*?)）', fix_paren, text)
 
@@ -337,6 +336,7 @@ columns_to_convert = [
     '招生人数（选填）'
 ]
 
+
 def process_score_file(file_path):
     try:
         df = pd.read_excel(file_path, header=2, dtype={
@@ -358,6 +358,7 @@ def process_score_file(file_path):
         raise Exception(f"文件缺少以下列：{missing_columns}")
 
     df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
+    df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
     df['录取人数（选填）'] = pd.to_numeric(df['录取人数（选填）'], errors='coerce')
     df = df.dropna(subset=['最低分'])
 
@@ -367,14 +368,23 @@ def process_score_file(file_path):
     df['招生类型（选填）'] = df['招生类型（选填）'].replace([None], '')
 
     try:
-        group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）',
-                           '招生代码']
-        group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）', '招生代码']
+        group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
+        group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）']
 
+        # 获取最低分的索引
         min_indices_code = df.groupby(group_with_code)['最低分'].idxmin()
         min_indices_nocode = df.groupby(group_without_code)['最低分'].idxmin()
 
-        selected_indices = list(set(min_indices_code).union(set(min_indices_nocode)))
+        # 获取最高分的索引
+        max_indices_code = df.groupby(group_with_code)['最高分'].idxmax()
+        max_indices_nocode = df.groupby(group_without_code)['最高分'].idxmax()
+
+        # 合并所有需要的索引
+        selected_indices = list(set(min_indices_code).union(
+            set(min_indices_nocode),
+            set(max_indices_code),
+            set(max_indices_nocode)
+        ))
         result = df.loc[selected_indices].copy()
 
         # 补充录取人数为分组总和
@@ -390,6 +400,29 @@ def process_score_file(file_path):
                 return nocode_groups.get(key, '')
 
         result['录取人数（选填）'] = result.apply(get_group_total, axis=1)
+
+        # 对于每个分组，更新最高分
+        def update_max_score(row):
+            if row['专业组代码']:
+                mask = (df['学校名称'] == row['学校名称']) & \
+                       (df['省份'] == row['省份']) & \
+                       (df['一级层次'] == row['一级层次']) & \
+                       (df['招生科类'] == row['招生科类']) & \
+                       (df['招生批次'] == row['招生批次']) & \
+                       (df['专业组代码'] == row['专业组代码']) & \
+                       (df['招生类型（选填）'] == row['招生类型（选填）'])
+            else:
+                mask = (df['学校名称'] == row['学校名称']) & \
+                       (df['省份'] == row['省份']) & \
+                       (df['一级层次'] == row['一级层次']) & \
+                       (df['招生科类'] == row['招生科类']) & \
+                       (df['招生批次'] == row['招生批次']) & \
+                       (df['招生类型（选填）'] == row['招生类型（选填）'])
+
+            max_score = df.loc[mask, '最高分'].max()
+            return max_score if not pd.isna(max_score) else row['最高分']
+
+        result['最高分'] = result.apply(update_max_score, axis=1)
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
@@ -418,7 +451,8 @@ def process_score_file(file_path):
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
                     for cell in \
-                    list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                            list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[
+                                0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
