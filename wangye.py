@@ -337,9 +337,9 @@ columns_to_convert = [
     '招生人数（选填）'
 ]
 
-def process_score_file(file_path):
+def process_score_file(uploaded_file):
     try:
-        df = pd.read_excel(file_path, header=2, dtype={
+        df = pd.read_excel(uploaded_file, header=2, dtype={
             '专业组代码': str,
             '专业代码': str,
             '招生代码': str,
@@ -357,7 +357,6 @@ def process_score_file(file_path):
     if missing_columns:
         raise Exception(f"文件缺少以下列：{missing_columns}")
 
-    # 转换数值类型
     df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
     df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
     df['平均分'] = pd.to_numeric(df['平均分'], errors='coerce')
@@ -372,43 +371,29 @@ def process_score_file(file_path):
     try:
         group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
         group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）']
-
-        # 初始化结果DataFrame
         result_list = []
 
-        # 处理有专业组代码的情况
         if '专业组代码' in df.columns and not df['专业组代码'].empty:
             grouped = df[df['专业组代码'] != ''].groupby(group_with_code)
             for name, group in grouped:
                 if not group.empty:
-                    # 找到最低分的记录
                     min_row = group.loc[group['最低分'].idxmin()]
-                    # 找到该组的最高分
                     max_score = group['最高分'].max()
-
-                    # 创建新行
                     new_row = min_row.copy()
                     new_row['最高分'] = max_score
                     result_list.append(new_row)
 
-        # 处理无专业组代码的情况
         grouped = df[(df['专业组代码'] == '') | (df['专业组代码'].isna())].groupby(group_without_code)
         for name, group in grouped:
             if not group.empty:
-                # 找到最低分的记录
                 min_row = group.loc[group['最低分'].idxmin()]
-                # 找到该组的最高分
                 max_score = group['最高分'].max()
-
-                # 创建新行
                 new_row = min_row.copy()
                 new_row['最高分'] = max_score
                 result_list.append(new_row)
 
-        # 合并结果
         result = pd.DataFrame(result_list)
 
-        # 补充录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
         nocode_groups = df.groupby(group_without_code)['录取人数（选填）'].sum()
 
@@ -428,38 +413,32 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 选择需要的列，排除不需要的列
     selected_columns = [col for col in expected_columns
-                        if col in result.columns
-                        and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
+                        if col in result.columns and col not in ['招生专业', '专业方向（选填）']]
     result = result[selected_columns]
 
-    return result
+    # 将结果写入 BytesIO 对象
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        result.to_excel(writer, index=False, sheet_name='Sheet1')
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
 
-def save_to_excel(df, output_path):
-    try:
-        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-            workbook = writer.book
-            worksheet = writer.sheets['Sheet1']
+        for col in ['专业组代码', '专业代码', '招生代码']:
+            if col in result.columns:
+                col_idx = result.columns.get_loc(col) + 1
+                for row in range(2, len(result) + 2):
+                    worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
 
-            for col in ['专业组代码', '专业代码', '招生代码']:
-                if col in df.columns:
-                    col_idx = df.columns.get_loc(col) + 1
-                    for row in range(2, len(df) + 2):
-                        worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
+        for col in columns_to_convert:
+            if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
+                col_idx = result.columns.get_loc(col) + 1
+                for cell in \
+                        list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                    cell.number_format = numbers.FORMAT_TEXT
 
-            for col in columns_to_convert:
-                if col in df.columns and col not in ['专业组代码', '专业代码', '招生代码']:
-                    col_idx = df.columns.get_loc(col) + 1
-                    for cell in \
-                            list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[
-                                0]:
-                        cell.number_format = numbers.FORMAT_TEXT
-
-        return output_path
-    except Exception as e:
-        raise Exception(f"文件保存失败：{e}")
+    output.seek(0)
+    return output  # 返回给 Streamlit download_button 使用
 
 # ============================
 # 保持文本格式
