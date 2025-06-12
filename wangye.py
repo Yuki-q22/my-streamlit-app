@@ -729,6 +729,10 @@ def fuzzy_match(row, b_dict):
 
 
 def process_data(dfA, dfB):
+    # 确保导入所需库
+    import pandas as pd
+    import re
+    from difflib import SequenceMatcher
 
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
@@ -761,6 +765,7 @@ def process_data(dfA, dfB):
         # 情况3：多个候选记录，使用模糊匹配
         return fuzzy_match(row, b_dict)
 
+    dfA["专业组代码"] = dfA.apply(get_code, axis=1)
 
     return dfA
 
