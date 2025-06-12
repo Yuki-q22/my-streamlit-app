@@ -397,8 +397,7 @@ def process_score_file(file_path):
         raise Exception("筛选结果为空。")
 
     # 保留期望列，但排除招生专业和专业方向，新增'组内最高分'列
-    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）']]
-    selected_columns.append('组内最高分')
+    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
