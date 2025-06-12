@@ -434,8 +434,10 @@ def process_score_file(uploaded_file):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for cell in worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False)[0]:
-                        cell.number_format = numbers.FORMAT_TEXT
+                    for col_cells in worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2,
+                                                         values_only=False):
+                        for cell in col_cells:
+                            cell.number_format = numbers.FORMAT_TEXT
 
         output.seek(0)
         return output
