@@ -802,7 +802,7 @@ with st.expander("📌 功能说明", expanded=True):
     """)
 
 # 更新日志对话框
-with st.expander("📢 版本更新（2025.6.6更新）", expanded=False):
+with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
     st.markdown("""
     ### 2025.6.12更新
     院校分提取逻辑更新  
