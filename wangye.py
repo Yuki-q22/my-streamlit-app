@@ -656,7 +656,7 @@ rename_mapping_B = {
 
 
 def clean_remark(text):
-    """备注清洗函数"""
+    """更彻底的备注清洗函数"""
     if pd.isna(text):
         return ""
 
@@ -692,14 +692,17 @@ def fuzzy_match(row, b_dict):
         empty_remarks = [c for c in candidates if not c["专业备注（选填）_清洗"]]
         if empty_remarks:
             return empty_remarks[0]["专业组代码"]
-        # 如果没有完全空白的备注，则选择第一个
+        # 如果没有完全空白的备注，则选择第一个（或根据其他逻辑）
         return candidates[0]["专业组代码"]
 
     for candidate in candidates:
         remark_b = candidate["专业备注（选填）_清洗"]
 
         # 1. 优先判断核心关键词匹配
+        # 提取A备注中的关键词（按空格分割）
         keywords_a = set(remark_a.split())
+
+        # 检查A的所有关键词是否都出现在B备注中
         if keywords_a and all(kw in remark_b for kw in keywords_a):
             return candidate["专业组代码"]
 
@@ -707,18 +710,21 @@ def fuzzy_match(row, b_dict):
         if remark_a in remark_b:
             return candidate["专业组代码"]
 
-        # 3. 相似度匹配（Jaccard相似度）
+        # 3. 相似度匹配（使用集合相似度，更高效）
         set_a = set(remark_a.split())
         set_b = set(remark_b.split())
 
-        if set_a and set_b:
+        if not set_a or not set_b:
+            similarity = 0
+        else:
+            # 使用Jaccard相似度
             intersection = len(set_a & set_b)
             union = len(set_a | set_b)
             similarity = intersection / union if union > 0 else 0
 
-            if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
-                max_similarity = similarity
-                best_match = candidate
+        if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
+            max_similarity = similarity
+            best_match = candidate
 
     return best_match["专业组代码"] if best_match else None
 
@@ -731,20 +737,48 @@ def process_data(dfA, dfB):
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
-    # 构建完整组合键（含所有字段，包括备注）
+    # 构建基础组合键（不含备注）
+    base_key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
+    dfA["基础组合键"] = dfA[base_key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join(i.strip() for i in x), axis=1)
+    dfB["基础组合键"] = dfB[base_key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join(i.strip() for i in x), axis=1)
+
+    # 构建完整组合键（含备注）
     dfA["组合键"] = dfA[tableA_fields].fillna("").astype(str).apply(
         lambda x: "|".join(i.strip() for i in x), axis=1)
     dfB["组合键"] = dfB[tableA_fields].fillna("").astype(str).apply(
         lambda x: "|".join(i.strip() for i in x), axis=1)
 
-    # 构建B表字典：组合键 → 记录列表
-    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+    # 检查基础组合键是否有重复（在A表和B表中）
+    a_base_duplicates = dfA["基础组合键"].duplicated(keep=False)
+    b_base_duplicates = dfB["基础组合键"].duplicated(keep=False)
+
+    # 创建标记列，指示是否可以使用基础组合键匹配
+    dfA["可使用基础键"] = ~a_base_duplicates & ~dfA["基础组合键"].isin(dfB.loc[b_base_duplicates, "基础组合键"])
+
+    # 构建B表字典：基础组合键 → 记录列表（不含备注）
+    b_base_dict = dfB.groupby("基础组合键").apply(lambda x: x.to_dict("records")).to_dict()
+
+    # 构建B表字典：完整组合键 → 记录列表（含备注）
+    b_full_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+
+    def get_code(row):
+        # 如果可以使用基础组合键且B表中有对应记录
+        if row["可使用基础键"]:
+            base_key = row["基础组合键"]
+            candidates = b_base_dict.get(base_key, [])
+            if len(candidates) == 1:
+                return candidates[0]["专业组代码"]
+
+        # 否则使用带备注的模糊匹配
+        return fuzzy_match(row, b_full_dict)
 
     # 应用匹配逻辑
-    dfA["专业组代码"] = dfA.apply(lambda row: fuzzy_match(row, b_dict), axis=1)
+    dfA["专业组代码"] = dfA.apply(get_code, axis=1)
 
     # 清理临时列
-    dfA.drop(columns=["组合键", "专业备注（选填）_清洗"], inplace=True, errors="ignore")
+    dfA.drop(columns=["基础组合键", "组合键", "可使用基础键", "专业备注（选填）_清洗"], inplace=True, errors="ignore")
 
     return dfA
 
