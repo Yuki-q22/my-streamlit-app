@@ -244,7 +244,7 @@ def analyze_and_fix(text):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
     # 2. pycorrector 拼写检查
-    corrected, detail = pycorrector.correct(text)
+    corrected, detail = pycorrector.corrector.correct(text)
     if corrected != text:
         for wrong, right, start, end in detail:
             issues.append(f"错别字：'{wrong}'→'{right}'")
