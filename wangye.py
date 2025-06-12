@@ -337,7 +337,6 @@ columns_to_convert = [
     '招生人数（选填）'
 ]
 
-
 def process_score_file(file_path):
     try:
         df = pd.read_excel(file_path, header=2, dtype={
@@ -369,61 +368,35 @@ def process_score_file(file_path):
     df['招生类型（选填）'] = df['招生类型（选填）'].replace([None], '')
 
     try:
+        # 分组字段（含专业组代码）
         group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
-        group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）']
 
-        # 获取最低分的索引
-        min_indices_code = df.groupby(group_with_code)['最低分'].idxmin()
-        min_indices_nocode = df.groupby(group_without_code)['最低分'].idxmin()
+        # 取每组最低分所在行索引
+        min_indices = df.groupby(group_with_code)['最低分'].idxmin()
 
-        # 获取最高分的索引
-        max_indices_code = df.groupby(group_with_code)['最高分'].idxmax()
-        max_indices_nocode = df.groupby(group_without_code)['最高分'].idxmax()
+        # 取每组最高分数（单纯数值，不取对应行）
+        max_scores = df.groupby(group_with_code)['最高分'].max()
 
-        # 合并所有需要的索引
-        selected_indices = list(set(min_indices_code).union(
-            set(min_indices_nocode),
-            set(max_indices_code),
-            set(max_indices_nocode)
-        ))
-        result = df.loc[selected_indices].copy()
+        # 取最低分行数据
+        result = df.loc[min_indices].copy()
 
-        # 补充录取人数为分组总和
+        # 在result中添加该组最高分列（放入新列，比如'组内最高分'）
+        def get_max_score(row):
+            key = tuple(row[col] for col in group_with_code)
+            return max_scores.get(key, None)
+
+        result['组内最高分'] = result.apply(get_max_score, axis=1)
+
+        # 平均分保持最低分对应的平均分，不变（已经在最低分行）
+
+        # 录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
-        nocode_groups = df.groupby(group_without_code)['录取人数（选填）'].sum()
 
         def get_group_total(row):
-            if row['专业组代码']:
-                key = tuple(row[col] for col in group_with_code)
-                return code_groups.get(key, '')
-            else:
-                key = tuple(row[col] for col in group_without_code)
-                return nocode_groups.get(key, '')
+            key = tuple(row[col] for col in group_with_code)
+            return code_groups.get(key, '')
 
         result['录取人数（选填）'] = result.apply(get_group_total, axis=1)
-
-        # 对于每个分组，更新最高分
-        def update_max_score(row):
-            if row['专业组代码']:
-                mask = (df['学校名称'] == row['学校名称']) & \
-                       (df['省份'] == row['省份']) & \
-                       (df['一级层次'] == row['一级层次']) & \
-                       (df['招生科类'] == row['招生科类']) & \
-                       (df['招生批次'] == row['招生批次']) & \
-                       (df['专业组代码'] == row['专业组代码']) & \
-                       (df['招生类型（选填）'] == row['招生类型（选填）'])
-            else:
-                mask = (df['学校名称'] == row['学校名称']) & \
-                       (df['省份'] == row['省份']) & \
-                       (df['一级层次'] == row['一级层次']) & \
-                       (df['招生科类'] == row['招生科类']) & \
-                       (df['招生批次'] == row['招生批次']) & \
-                       (df['招生类型（选填）'] == row['招生类型（选填）'])
-
-            max_score = df.loc[mask, '最高分'].max()
-            return max_score if not pd.isna(max_score) else row['最高分']
-
-        result['最高分'] = result.apply(update_max_score, axis=1)
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
@@ -431,10 +404,9 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 修改此处：从expected_columns中排除不需要的列
-    selected_columns = [col for col in expected_columns
-                        if col in result.columns
-                        and col not in ['招生专业', '专业方向（选填）']]
+    # 保留期望列，但排除招生专业和专业方向，新增'组内最高分'列
+    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）']]
+    selected_columns.append('组内最高分')
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -454,9 +426,7 @@ def process_score_file(file_path):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for cell in \
-                            list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[
-                                0]:
+                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
