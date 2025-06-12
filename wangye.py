@@ -278,12 +278,16 @@ def process_chunk(chunk):
         chunk['招生专业匹配结果'] = chunk.apply(
             lambda r: check_major_combo(r['招生专业'], r['一级层次']), axis=1)
 
-    # 备注处理
+    # 备注处理 - 修改这部分
     if '专业备注' in chunk.columns:
-        chunk['备注检查结果'] = chunk['专业备注'].apply(
-            lambda x: '；'.join(analyze_and_fix(x)[1]) if pd.notna(x) else '无问题')
-        chunk['修改后备注'] = chunk['专业备注'].apply(
-            lambda x: analyze_and_fix(x)[0] if pd.notna(x) else '')
+        def process_remark(remark):
+            if pd.isna(remark) or not str(remark).strip():
+                return '无问题', ''
+            fixed_text, issues = analyze_and_fix(remark)
+            return '；'.join(issues) if issues else '无问题', fixed_text
+
+        chunk[['备注检查结果', '修改后备注']] = chunk['专业备注'].apply(
+            lambda x: pd.Series(process_remark(x)))
 
     # 分数检查
     score_columns = ['最高分', '平均分', '最低分']
