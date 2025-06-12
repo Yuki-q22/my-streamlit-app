@@ -337,9 +337,10 @@ columns_to_convert = [
     '招生人数（选填）'
 ]
 
-def process_score_file(uploaded_file):
+
+def process_score_file(file_path):
     try:
-        df = pd.read_excel(uploaded_file, header=2, dtype={
+        df = pd.read_excel(file_path, header=2, dtype={
             '专业组代码': str,
             '专业代码': str,
             '招生代码': str,
@@ -371,6 +372,7 @@ def process_score_file(uploaded_file):
     try:
         group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
         group_without_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）']
+
         result_list = []
 
         if '专业组代码' in df.columns and not df['专业组代码'].empty:
@@ -393,7 +395,7 @@ def process_score_file(uploaded_file):
                 result_list.append(new_row)
 
         result = pd.DataFrame(result_list)
-        # 录取人数分组求和
+
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
         nocode_groups = df.groupby(group_without_code)['录取人数（选填）'].sum()
 
@@ -414,14 +416,15 @@ def process_score_file(uploaded_file):
         raise Exception("筛选结果为空。")
 
     selected_columns = [col for col in expected_columns
-                        if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
+                        if col in result.columns
+                        and col not in ['招生专业', '专业方向（选填）']]
     result = result[selected_columns]
 
-    # 将结果写入 BytesIO 对象
-    output = BytesIO()
+    output_path = file_path.replace('.xlsx', '_院校分.xlsx')
+
     try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            result.to_excel(writer, index=False, sheet_name='Sheet1')
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            result.to_excel(writer, index=False)
             workbook = writer.book
             worksheet = writer.sheets['Sheet1']
 
@@ -434,16 +437,14 @@ def process_score_file(uploaded_file):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for col_cells in worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2,
-                                                         values_only=False):
-                        for cell in col_cells:
-                            cell.number_format = numbers.FORMAT_TEXT
+                    for cell in \
+                            list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[
+                                0]:
+                        cell.number_format = numbers.FORMAT_TEXT
 
-        output.seek(0)
-        return output
+        return output_path
     except Exception as e:
         raise Exception(f"文件保存失败：{e}")
-
 # ============================
 # 保持文本格式
 # ============================
