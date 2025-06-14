@@ -847,7 +847,7 @@ with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（未测试，不可以用！）"])
+tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）"])
 
 # ====================== 院校分提取 ======================
 with tab1:
@@ -1005,7 +1005,7 @@ with tab3:
 
 # ====================== 专业组代码匹配 ======================
 with tab4:
-    st.header("专业组代码匹配")
+    st.header("专业组代码匹配（需要检查！）")
 
     uploaded_fileA = st.file_uploader("上传专业分导入模板", type=["xls", "xlsx"], key="fileA")
     uploaded_fileB = st.file_uploader("上传招生计划数据导出文件", type=["xls", "xlsx"], key="fileB")
