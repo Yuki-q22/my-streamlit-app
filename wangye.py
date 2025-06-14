@@ -749,9 +749,6 @@ def fuzzy_match(row, b_dict):
 
 def process_data(dfA, dfB):
     # 确保导入所需库
-    import pandas as pd
-    import re
-    from difflib import SequenceMatcher
 
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
@@ -810,7 +807,7 @@ with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
     st.markdown("""
     ### 2025.6.12更新
     院校分提取逻辑更新  
-      - 提取最高分时会取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
+      - 提取最高分改为取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
 
     ### 历史更新
 
