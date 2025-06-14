@@ -359,6 +359,7 @@ def process_score_file(file_path):
 
     df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
     df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
+    df['招生人数（选填）'] = pd.to_numeric(df['招生人数（选填）'], errors='coerce')
     df['录取人数（选填）'] = pd.to_numeric(df['录取人数（选填）'], errors='coerce')
     df = df.dropna(subset=['最低分'])
 
@@ -386,16 +387,16 @@ def process_score_file(file_path):
         # 录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
 
-        def get_enroll_total(row):
+        def get_group_total(row, column_name):
             key = tuple(row[col] for col in group_with_code)
-            return enroll_groups.get(key, '')
+            if column_name == '录取人数（选填）':
+                return code_groups.get(key, '')
+            elif column_name == '招生人数（选填）':
+                return enroll_groups.get(key, '')
+            return ''
 
-        def get_group_total(row):
-            key = tuple(row[col] for col in group_with_code)
-            return code_groups.get(key, '')
-
-        result['招生人数（选填）'] = result.apply(get_enroll_total, axis=1)
-        result['录取人数（选填）'] = result.apply(get_group_total, axis=1)
+        result['录取人数（选填）'] = result.apply(lambda row: get_group_total(row, '录取人数（选填）'), axis=1)
+        result['招生人数（选填）'] = result.apply(lambda row: get_group_total(row, '招生人数（选填）'), axis=1)
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
