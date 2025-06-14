@@ -400,14 +400,15 @@ def process_score_file(file_path):
 
         def get_group_total(row, column_name):
             key = tuple(row[col] for col in group_with_code)
-            if column_name == '录取人数（选填）':
+            if column_name == '招生人数（选填）':
                 return code_groups.get(key, '')
-            elif column_name == '招生人数（选填）':
+            elif column_name == '录取人数（选填）':
                 return enroll_groups.get(key, '')
             return ''
 
-        result['录取人数（选填）'] = result.apply(lambda row: get_group_total(row, '录取人数（选填）'), axis=1)
         result['招生人数（选填）'] = result.apply(lambda row: get_group_total(row, '招生人数（选填）'), axis=1)
+        result['录取人数（选填）'] = result.apply(lambda row: get_group_total(row, '录取人数（选填）'), axis=1)
+
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
@@ -415,8 +416,8 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 保留期望列，但排除招生专业和专业方向，新增'组内最高分'列
-    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
+    # 保留期望列，但排除招生专业和专业方向、专业备注、选科要求、次选科目
+    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）', '选科要求', '次选科目']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
