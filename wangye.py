@@ -380,14 +380,21 @@ def process_score_file(file_path):
         # 取最低分行数据
         result = df.loc[min_indices].copy()
 
+        # 招生人数为分组总和
+        enroll_groups = df.groupby(group_with_code)['招生人数（选填）'].sum()
 
         # 录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
+
+        def get_enroll_total(row):
+            key = tuple(row[col] for col in group_with_code)
+            return enroll_groups.get(key, '')
 
         def get_group_total(row):
             key = tuple(row[col] for col in group_with_code)
             return code_groups.get(key, '')
 
+        result['招生人数（选填）'] = result.apply(get_enroll_total, axis=1)
         result['录取人数（选填）'] = result.apply(get_group_total, axis=1)
 
     except Exception as e:
