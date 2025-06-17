@@ -149,18 +149,26 @@ def normalize_brackets(text):
 
 
 def clean_outer_punctuation(text):
-    """清理最外层括号外的标点符号"""
+    """清理最外层括号外的标点符号以及括号内多余标点"""
     if pd.isna(text) or not str(text).strip():
         return text
     text = str(text).strip()
+
+    # 先处理括号外的标点
     text = REGEX_PATTERNS['outer_punct'].sub('', text)
     parts = re.split(r'(（.*?）)', text)
     cleaned_parts = []
+
     for part in parts:
         if part.startswith('（') and part.endswith('）'):
-            cleaned_parts.append(part)
+            # 处理括号内的标点
+            inner_content = part[1:-1]  # 去掉括号
+            # 清理括号内多余标点（保留必要的标点，如顿号、逗号等）
+            inner_content = REGEX_PATTERNS['inner_punct'].sub('', inner_content)
+            cleaned_parts.append(f'（{inner_content}）')
         else:
             cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
+
     return ''.join(cleaned_parts)
 
 
