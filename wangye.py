@@ -245,7 +245,7 @@ def analyze_and_fix(text):
     issues = []
 
     # 1. 括号规范化
-    text = normalize_brackets(text)
+    text = str(normalize_brackets(text) or "").strip()
     original = text
     issues = []
 
