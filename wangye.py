@@ -235,22 +235,42 @@ def analyze_and_fix(text):
 
     # 括号匹配补全
     stack = []
+    bracket_positions = []
+
+    # 记录所有括号及其位置
+    for i, char in enumerate(text):
+        if char in ('（', '）'):
+            bracket_positions.append((i, char))
+
+    # 检查匹配情况
+    unmatched_left = 0
     unmatched_right = 0
-    for char in text:
+
+    for pos, char in bracket_positions:
         if char == '（':
-            stack.append(char)
+            stack.append(pos)
         elif char == '）':
             if stack:
                 stack.pop()
             else:
                 unmatched_right += 1
+    unmatched_left = len(stack)
 
-    if stack:  # 有多余的左括号
-        text += '）' * len(stack)
-        issues.append(f"补充缺失右括号 {len(stack)} 个")
-    if unmatched_right:  # 有多余的右括号
+    # 生成问题报告
+    if unmatched_left > 0 or unmatched_right > 0:
+        if unmatched_left > 0:
+            issues.append(f"检测到 {unmatched_left} 个未闭合的左括号（位置：{stack})")
+        if unmatched_right > 0:
+            issues.append(f"检测到 {unmatched_right} 个未匹配的右括号")
+
+    # 自动修复（只在确实不匹配时修复）
+    if unmatched_left > 0 and unmatched_right == 0:
+        text += '）' * unmatched_left
+    elif unmatched_right > 0 and unmatched_left == 0:
         text = '（' * unmatched_right + text
-        issues.append(f"补充缺失左括号 {unmatched_right} 个")
+    elif unmatched_left > 0 and unmatched_right > 0:
+        # 当左右都不匹配时，优先补全左括号
+        text = '（' * unmatched_right + text + '）' * unmatched_left
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
