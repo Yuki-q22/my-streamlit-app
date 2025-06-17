@@ -253,11 +253,11 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-        # 先处理外层标点
-        cleaned_text, outer_issues = clean_outer_punctuation(text)
-        if outer_issues:
-            issues.extend(outer_issues)
-        text = cleaned_text
+    # 先处理外层标点
+    cleaned_text, outer_issues = clean_outer_punctuation(text)
+    if outer_issues:
+        issues.extend(outer_issues)
+    text = cleaned_text
 
     # 原始括号数
     original_left = text.count('（')
