@@ -202,42 +202,50 @@ def analyze_and_fix(text):
 
     # 2. 括号匹配检测，补全并提示
     stack = []
-    mismatch_positions = []
-    # 记录所有不匹配的位置
-    for i, ch in enumerate(text):
+    mismatch_detected = False
+    extra_right = 0
+    extra_left = 0
+
+    for ch in text:
         if ch == '（':
-            stack.append(i)
+            stack.append(ch)
         elif ch == '）':
             if stack:
                 stack.pop()
             else:
-                mismatch_positions.append(i)  # 记录多余右括号位置
+                extra_right += 1
+                mismatch_detected = True
 
-    # 记录未匹配的左括号位置
-    for pos in stack:
-        mismatch_positions.append(pos)
+    if stack:
+        extra_left = len(stack)
+        mismatch_detected = True
 
-    if mismatch_positions:
-        issues.append("括号不匹配：缺失或多余括号")
+    if mismatch_detected:
+        issue_msg = "括号不匹配："
+        if extra_left > 0:
+            issue_msg += f"缺少{extra_left}个右括号"
+        if extra_right > 0:
+            if extra_left > 0:
+                issue_msg += "，"
+            issue_msg += f"多余{extra_right}个右括号"
+        issues.append(issue_msg)
+
         # 补全括号
-        left_count = text.count('（')
-        right_count = text.count('）')
-        if left_count > right_count:
-            diff = left_count - right_count
-            text += '）' * diff
-        elif right_count > left_count:
-            diff = right_count - left_count
-            text = '（' * diff + text
+        if extra_left > 0:
+            text += '）' * extra_left
+        if extra_right > 0:
+            # 删除多余的右括号
+            text = text.replace('）', '', extra_right)
 
-    # 3. 嵌套括号和重复括号内容检测
-    text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
-    if text2 != text:
-        issues.append("存在嵌套括号")
-    text = text2
+        # 3. 嵌套括号和重复括号内容检测
+        text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
+        if text2 != text:
+            issues.append("存在嵌套括号")
+        text = text2
 
-    text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
-    if n > 0:
-        issues.append("存在重复括号内容")
+        text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
+        if n > 0:
+            issues.append("存在重复括号内容")
 
     # 4. 括号内内容处理：去除首尾多余标点，并记录问题
     def fix_paren(m):
