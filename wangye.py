@@ -165,6 +165,7 @@ def clean_outer_punctuation(text):
         if part.startswith('（') and part.endswith('）'):
             # 处理括号内的标点
             inner_content = part[1:-1]  # 去掉括号
+            original_inner = inner_content  # 保留原始内容
 
             # 检查括号内是否只有标点或冒号（内容不完整）
             if re.fullmatch(r'^[:：、，。；]+$', inner_content.strip()):
@@ -172,17 +173,22 @@ def clean_outer_punctuation(text):
                 continue
 
             # 清理括号内末尾多余的标点
-            inner_content = re.sub(r'[:：、，。；]+$', '', inner_content)
+            cleaned_inner = re.sub(r'[:：、，。；]+$', '', inner_content)
 
             # 如果清理后内容为空，则整个括号部分都去掉
-            if not inner_content.strip():
+            if not cleaned_inner.strip():
                 continue
 
-            cleaned_parts.append(f'（{inner_content}）')
+            # 如果末尾标点被删除，记录问题
+            if cleaned_inner != original_inner:
+                issues.append(f"括号末尾多余标点已清理: 原内容'{part}'")
+
+            cleaned_parts.append(f'（{cleaned_inner}）')
         else:
             cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
 
     return ''.join(cleaned_parts), issues
+
 
 
 def check_score_consistency(row):
