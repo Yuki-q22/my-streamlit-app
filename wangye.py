@@ -241,10 +241,10 @@ def analyze_and_fix(text):
         if left_count != right_count:
             if left_count > right_count:
                 text += '）' * (left_count - right_count)
-                issues.append(f"补充缺失右括号 {left_count - right_count} 个")
+                issues.append(f"括号数量不匹配：缺少 {left_count - right_count} 个右括号")
             else:
                 text = '（' * (right_count - left_count) + text
-                issues.append(f"补充缺失左括号 {right_count - left_count} 个")
+                issues.append(f"括号数量不匹配：缺少 {right_count - left_count} 个左括号")
 
 
     # 处理嵌套括号
