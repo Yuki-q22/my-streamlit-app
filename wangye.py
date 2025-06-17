@@ -227,50 +227,25 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 先处理外层标点（修改部分）
-    cleaned_text, outer_issues = clean_outer_punctuation(text)
-    if outer_issues:
-        issues.extend(outer_issues)
-    text = cleaned_text
+        # 先处理外层标点
+        cleaned_text, outer_issues = clean_outer_punctuation(text)
+        if outer_issues:
+            issues.extend(outer_issues)
+        text = cleaned_text
 
-    # 括号匹配补全
-    stack = []
-    bracket_positions = []
+        # 检查括号数量是否匹配 - 修改部分开始
+        left_count = text.count('（')
+        right_count = text.count('）')
 
-    # 记录所有括号及其位置
-    for i, char in enumerate(text):
-        if char in ('（', '）'):
-            bracket_positions.append((i, char))
-
-    # 检查匹配情况
-    unmatched_left = 0
-    unmatched_right = 0
-
-    for pos, char in bracket_positions:
-        if char == '（':
-            stack.append(pos)
-        elif char == '）':
-            if stack:
-                stack.pop()
+        # 只有括号数量不匹配时才进行补全并记录问题
+        if left_count != right_count:
+            if left_count > right_count:
+                text += '）' * (left_count - right_count)
+                issues.append(f"补充缺失右括号 {left_count - right_count} 个")
             else:
-                unmatched_right += 1
-    unmatched_left = len(stack)
+                text = '（' * (right_count - left_count) + text
+                issues.append(f"补充缺失左括号 {right_count - left_count} 个")
 
-    # 生成问题报告
-    if unmatched_left > 0 or unmatched_right > 0:
-        if unmatched_left > 0:
-            issues.append(f"检测到 {unmatched_left} 个未闭合的左括号（位置：{stack})")
-        if unmatched_right > 0:
-            issues.append(f"检测到 {unmatched_right} 个未匹配的右括号")
-
-    # 自动修复（只在确实不匹配时修复）
-    if unmatched_left > 0 and unmatched_right == 0:
-        text += '）' * unmatched_left
-    elif unmatched_right > 0 and unmatched_left == 0:
-        text = '（' * unmatched_right + text
-    elif unmatched_left > 0 and unmatched_right > 0:
-        # 当左右都不匹配时，优先补全左括号
-        text = '（' * unmatched_right + text + '）' * unmatched_left
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
