@@ -247,6 +247,8 @@ def analyze_and_fix(text):
 
     # 1. 括号规范化
     text = normalize_brackets(text)
+    if text is None:
+        text = ''
     original = text
     issues = []
 
@@ -254,24 +256,30 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 先处理外层标点（修复点1：接收两个返回值）
+    # 先处理外层标点（解包返回值）
     cleaned_text, outer_issues = clean_outer_punctuation(text)
     if outer_issues:
         issues.extend(outer_issues)
     text = cleaned_text
+    if text is None:
+        text = ''
 
-    # 原始括号数
+    # 记录括号数
     original_left = text.count('（')
     original_right = text.count('）')
 
     # 标准化全角括号
     text2 = normalize_brackets(text)
+    if text2 is None:
+        text2 = ''
     if text2 != text:
         issues.append("存在非标准括号（已替换为全角）")
     text = text2
 
-    # 再次清理外层标点（修复点2：记得解包）
+    # 再次清理外层标点（解包返回值）
     text2, _ = clean_outer_punctuation(text)
+    if text2 is None:
+        text2 = ''
     if text2 != text:
         issues.append("存在外围标点或空格（已清理）")
     text = text2
@@ -289,7 +297,7 @@ def analyze_and_fix(text):
     # 处理多余括号
     text2 = remove_unpaired_brackets(text, issues)
     if text2 != text:
-        text = text2  # 已在函数中记录问题
+        text = text2  # 函数内已记录问题
 
     # 嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
