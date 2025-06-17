@@ -245,7 +245,7 @@ def analyze_and_fix(text):
     original = text
     issues = []
 
-    # 括号标准化（第一次）
+    # 1. 括号规范化
     text = str(normalize_brackets(text) or "").strip()
     original = text
     issues = []
@@ -254,7 +254,7 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 第一次外层标点清理
+    # 先处理外层标点
     cleaned_text, outer_issues = clean_outer_punctuation(text)
     if outer_issues:
         issues.extend([str(i) for i in outer_issues])
@@ -264,19 +264,19 @@ def analyze_and_fix(text):
     original_left = text.count('（')
     original_right = text.count('）')
 
-    # 再次括号规范化
+    # 标准化全角括号
     text2 = normalize_brackets(text)
     if text2 != text:
         issues.append("存在非标准括号（已替换为全角）")
     text = text2
 
-    # 第二次外层标点清理（需正确解包）
+    # 再次处理外围标点（需正确解包）
     text2, _ = clean_outer_punctuation(text)
     if text2 != text:
         issues.append("存在外围标点或空格（已清理）")
     text = text2
 
-    # 补全括号不匹配
+    # 括号缺失补全
     left, right = text.count('（'), text.count('）')
     if left != right:
         if left > right:
@@ -286,12 +286,12 @@ def analyze_and_fix(text):
             text = '（' * (right - left) + text
             issues.append(f"补充缺失左括号 {right - left} 个")
 
-    # 移除多余括号
+    # 🔍 多余括号处理
     text2 = remove_unpaired_brackets(text, issues)
     if text2 != text:
-        text = text2  # 问题已在 remove_unpaired_brackets 中记录
+        text = text2
 
-    # 嵌套括号
+    # 嵌套括号处理
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
     if text2 != text:
         issues.append("存在嵌套括号")
@@ -302,7 +302,7 @@ def analyze_and_fix(text):
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 清理括号内标点
+    # 括号内容清洗
     def fix_paren(m):
         c = m.group(1)
         f = c.strip('，、,;；')
@@ -328,24 +328,26 @@ def analyze_and_fix(text):
 
     text = re.sub(r'（(.*?)）', dedup, text)
 
-    # 多余标点简化
+    # 简化多余标点
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
 
-    # 相似重复内容（用原始值做参考）
+    # 相似重复检测
     contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
     for i in range(len(contents)):
         for j in range(i + 1, len(contents)):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
 
-    # 错别字字典替换
+    # 规则错别字校正
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
-    # 最终返回：文本 + 纯字符串列表
-    return text, [str(i) for i in issues]
+    # ✅ 返回值修复：确保 issues 是字符串列表
+    issues = [str(i) for i in issues]
+
+    return text, issues
 
 
 def process_chunk(chunk):
