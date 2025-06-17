@@ -200,21 +200,18 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 2. 精确的括号匹配检测
     stack = []
     extra_right_positions = []
 
-    # 第一遍扫描：记录所有不匹配的右括号位置
     for i, char in enumerate(text):
         if char == '（':
-            stack.append(i)  # 存储左括号位置
+            stack.append(i)
         elif char == '）':
             if stack:
                 stack.pop()
             else:
-                extra_right_positions.append(i)  # 记录多余右括号位置
+                extra_right_positions.append(i)
 
-    # 生成问题描述
     if stack or extra_right_positions:
         issue_msg = "括号不匹配："
         details = []
@@ -225,21 +222,15 @@ def analyze_and_fix(text):
         issue_msg += "，".join(details)
         issues.append(issue_msg)
 
-        # 精确修正（保持原始文本结构）
+        # 修正代码保持不变
         text_list = list(text)
-
-        # 先删除多余的右括号（从后往前删除避免影响索引）
         for pos in sorted(extra_right_positions, reverse=True):
             if pos < len(text_list):
                 text_list.pop(pos)
-
-        # 再补全缺少的右括号
         if stack:
             text_list.extend(['）'] * len(stack))
-
         text = ''.join(text_list)
 
-        # 3. 嵌套括号检测
         if '（（' in text or '））' in text:
             issues.append("存在嵌套括号")
             text = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
