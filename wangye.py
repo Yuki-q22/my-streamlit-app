@@ -219,7 +219,7 @@ def analyze_and_fix(text):
             issues.append(f"缺少{len(stack)}个右括号")
         if extra_right_positions:
             issues.append(f"多余{len(extra_right_positions)}个右括号")
-        issue_msg += "，".join(details)
+        issue_msg += "，".join(issues)
         issues.append(issue_msg)
 
         # 修正代码保持不变
