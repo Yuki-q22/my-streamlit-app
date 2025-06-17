@@ -191,101 +191,112 @@ def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
 
-    # 1. 括号规范化
+    # 1. 标准化括号和外部多余标点清理
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
     original = text
     issues = []
 
-    # 白名单跳过
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # --------------------
-    # 新增：括号匹配检测和补全
-    left, right = text.count('（'), text.count('）')
-
-    # 检测括号是否平衡（不完全用count判断，因为）可能多余出现）
-    # 这里用栈方式检测多余右括号
+    # 2. 括号匹配检测，补全并提示
     stack = []
-    mismatch = False
-    for ch in text:
+    mismatch_detected = False
+    # 不用break，扫描完整文本检测所有异常
+    for i, ch in enumerate(text):
         if ch == '（':
-            stack.append(ch)
+            stack.append(i)
         elif ch == '）':
             if stack:
                 stack.pop()
             else:
-                mismatch = True  # 多余右括号
-                break
-    if not mismatch and len(stack) == 0:
-        pass  # 括号匹配正常
-    else:
-        mismatch = True
+                mismatch_detected = True  # 多余右括号
 
-    if mismatch:
+    if stack:
+        mismatch_detected = True  # 多余左括号未匹配
+
+    if mismatch_detected:
         issues.append("括号不匹配：缺失或多余括号")
         # 补全括号
-        if left > right:
-            text += '）' * (left - right)
-        elif right > left:
-            text = '（' * (right - left) + text
-    # --------------------
+        left_count = text.count('（')
+        right_count = text.count('）')
+        if left_count > right_count:
+            diff = left_count - right_count
+            text += '）' * diff
+        elif right_count > left_count:
+            diff = right_count - left_count
+            text = '（' * diff + text
 
-    # 处理嵌套括号
+    # 3. 嵌套括号和重复括号内容检测
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
     if text2 != text:
         issues.append("存在嵌套括号")
     text = text2
 
-    # 处理重复括号内容
     text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 括号内容清洗
+    # 4. 括号内内容处理：去除首尾多余标点，并记录问题
     def fix_paren(m):
-        c = m.group(1)
-        f = c.strip('，、,;；')
-        if f != c:
-            if c[0] in '，、,;；':
-                issues.append(f"括号内容开头多标点：'{c}'")
-            if c[-1] in '，、,;；':
-                issues.append(f"括号内容结尾多标点：'{c}'")
-        return f'（{f}）'
+        content = m.group(1)
+        orig_content = content
+        # 定义允许的标点清单，这里加上中文半角冒号等
+        puncts = '，、,;；:：。！？.!?'
+
+        # 去除首尾多余标点
+        start_strip = 0
+        end_strip = len(content)
+
+        while start_strip < end_strip and content[start_strip] in puncts:
+            start_strip += 1
+        while end_strip > start_strip and content[end_strip - 1] in puncts:
+            end_strip -= 1
+        new_content = content[start_strip:end_strip]
+
+        # 记录首尾多余标点情况
+        if start_strip > 0:
+            issues.append(f"括号内容开头多标点：'{orig_content}'")
+        if end_strip < len(content):
+            issues.append(f"括号内容结尾多标点：'{orig_content}'")
+
+        return f'（{new_content}）'
 
     text = re.sub(r'（(.*?)）', fix_paren, text)
 
-    # 括号内去重
+    # 5. 括号内内容去重，重复时记录问题
     seen = set()
 
     def dedup(m):
         c = m.group(1)
         if c in seen:
-            issues.append(f"重复内容：{c}")
-            return ''
+            issues.append(f"重复括号内容：'{c}'")
+            return ''  # 去重，去掉重复括号
         seen.add(c)
         return f'（{c}）'
 
     text = re.sub(r'（(.*?)）', dedup, text)
 
-    # 简化多余标点
+    # 6. 多余标点简化
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
 
-    # 相似重复检测
+    # 7. 相似内容检测，记录相似重复
     contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
     for i in range(len(contents)):
         for j in range(i + 1, len(contents)):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
 
-    # 规则字典校正
+    # 8. 规则字典校正
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
+
+
 
 
 
