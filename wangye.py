@@ -163,8 +163,11 @@ def clean_outer_punctuation(text):
         if part.startswith('（') and part.endswith('）'):
             # 处理括号内的标点
             inner_content = part[1:-1]  # 去掉括号
-            # 清理括号内多余标点（保留必要的标点，如顿号、逗号等）
-            inner_content = REGEX_PATTERNS['inner_punct'].sub('', inner_content)
+            # 清理括号内末尾多余的标点（冒号、顿号等）
+            inner_content = re.sub(r'[:：、，。；]+$', '', inner_content)
+            # 如果清理后内容为空，则整个括号部分都去掉
+            if not inner_content.strip():
+                continue
             cleaned_parts.append(f'（{inner_content}）')
         else:
             cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
