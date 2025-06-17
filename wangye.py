@@ -209,7 +209,7 @@ def analyze_and_fix(text):
         if stack:
             issues.append(f"缺少{len(stack)}个右括号")
         if extra_right_positions:
-            issues.append(f"多余{len(extra_right_positions)}个右括号")
+            issues.append(f"多余{len(stack)}个右括号")
         issue_msg += "，".join(issues)
         issues.append(issue_msg)
 
@@ -245,9 +245,9 @@ def analyze_and_fix(text):
 
         # 记录首尾多余标点情况
         if start_strip > 0:
-            issues.append(f"括号内容开头多标点：'{orig_content}'")
+            issues.append(f"内容多标点或内容不完整：'{orig_content}'")
         if end_strip < len(content):
-            issues.append(f"括号内容结尾多标点：'{orig_content}'")
+            issues.append(f"内容多标点或内容不完整：'{orig_content}'")
 
         return f'（{new_content}）'
 
