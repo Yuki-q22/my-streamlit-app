@@ -202,8 +202,8 @@ def analyze_and_fix(text):
 
     # 2. 括号匹配检测，补全并提示
     stack = []
-    mismatch_detected = False
-    # 不用break，扫描完整文本检测所有异常
+    mismatch_positions = []
+    # 记录所有不匹配的位置
     for i, ch in enumerate(text):
         if ch == '（':
             stack.append(i)
@@ -211,12 +211,13 @@ def analyze_and_fix(text):
             if stack:
                 stack.pop()
             else:
-                mismatch_detected = True  # 多余右括号
+                mismatch_positions.append(i)  # 记录多余右括号位置
 
-    if stack:
-        mismatch_detected = True  # 多余左括号未匹配
+    # 记录未匹配的左括号位置
+    for pos in stack:
+        mismatch_positions.append(pos)
 
-    if mismatch_detected:
+    if mismatch_positions:
         issues.append("括号不匹配：缺失或多余括号")
         # 补全括号
         left_count = text.count('（')
