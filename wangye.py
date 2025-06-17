@@ -234,14 +234,23 @@ def analyze_and_fix(text):
     text = cleaned_text
 
     # 括号匹配补全
-    left, right = text.count('（'), text.count('）')
-    if left != right:
-        if left > right:
-            text += '）' * (left - right)
-            issues.append(f"补充缺失右括号 {left - right} 个")
-        else:
-            text = '（' * (right - left) + text
-            issues.append(f"补充缺失左括号 {right - left} 个")
+    stack = []
+    unmatched_right = 0
+    for char in text:
+        if char == '（':
+            stack.append(char)
+        elif char == '）':
+            if stack:
+                stack.pop()
+            else:
+                unmatched_right += 1
+
+    if stack:  # 有多余的左括号
+        text += '）' * len(stack)
+        issues.append(f"补充缺失右括号 {len(stack)} 个")
+    if unmatched_right:  # 有多余的右括号
+        text = '（' * unmatched_right + text
+        issues.append(f"补充缺失左括号 {unmatched_right} 个")
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
