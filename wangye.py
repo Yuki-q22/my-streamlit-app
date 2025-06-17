@@ -136,16 +136,39 @@ def normalize_brackets(text):
     text = re.sub(r'[<《]', '（', text)  # 左书名号替换为左括号
     text = re.sub(r'[>》]', '）', text)  # 右书名号替换为右括号
 
-    # 补全普通括号
-    if '（' in text and '）' not in text:
-        text += '）'
-    if '）' in text and '（' not in text:
-        text = '（' + text
 
-    # 处理连续右括号
-    text = REGEX_PATTERNS['consecutive_right'].sub('）', text)
+def remove_unpaired_brackets(text, issues):
+    """检测并移除多余括号并记录问题"""
+    stack = []
+    new_text = []
+    for i, char in enumerate(text):
+        if char == '（':
+            stack.append('（')
+            new_text.append(char)
+        elif char == '）':
+            if stack:
+                stack.pop()
+                new_text.append(char)
+            else:
+                issues.append("存在多余的右括号")
+                # 不添加该多余括号
+        else:
+            new_text.append(char)
 
-    return text
+    # 如果还有多余的左括号
+    if stack:
+        count = len(stack)
+        issues.append(f"存在多余的左括号 {count} 个")
+        # 移除多余的左括号，从左往右删除未配对的‘（’
+        result = []
+        unmatched_left = count
+        for char in new_text:
+            if char == '（' and unmatched_left > 0:
+                unmatched_left -= 1
+                continue  # 跳过多余的左括号
+            result.append(char)
+        return ''.join(result)
+    return ''.join(new_text)
 
 
 def clean_outer_punctuation(text):
@@ -233,21 +256,36 @@ def analyze_and_fix(text):
             issues.extend(outer_issues)
         text = cleaned_text
 
-        # 检查括号数量是否匹配
-        left_count = text.count('（')
-        right_count = text.count('）')
+    # 原始括号数
+    original_left = text.count('（')
+    original_right = text.count('）')
 
-        # 补全括号，仅在原始文本左右括号数量不一致时处理
-        original_left, original_right = original.count('（'), original.count('）')
-        if original_left != original_right:
-            left, right = text.count('（'), text.count('）')
-            if left != right:
-                if left > right:
-                    text += '）' * (left - right)
-                    issues.append(f"补充缺失右括号 {left - right} 个")
-                else:
-                    text = '（' * (right - left) + text
-                    issues.append(f"补充缺失左括号 {right - left} 个")
+    # 标准化全角括号
+    text2 = normalize_brackets(text)
+    if text2 != text:
+        issues.append("存在非标准括号（已替换为全角）")
+    text = text2
+
+    # 外围标点清理
+    text2 = clean_outer_punctuation(text)
+    if text2 != text:
+        issues.append("存在外围标点或空格（已清理）")
+    text = text2
+
+    # 括号缺失补全
+    left, right = text.count('（'), text.count('）')
+    if left != right:
+        if left > right:
+            text += '）' * (left - right)
+            issues.append(f"补充缺失右括号 {left - right} 个")
+        else:
+            text = '（' * (right - left) + text
+            issues.append(f"补充缺失左括号 {right - left} 个")
+
+    # 🔍 新增：处理不配对的多余括号
+    text2 = remove_unpaired_brackets(text, issues)
+    if text2 != text:
+        text = text2  # 已在函数中记录问题
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
