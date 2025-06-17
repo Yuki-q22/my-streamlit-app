@@ -158,11 +158,16 @@ def clean_outer_punctuation(text):
     text = REGEX_PATTERNS['outer_punct'].sub('', text)
     parts = re.split(r'(（.*?）)', text)
     cleaned_parts = []
+    issues = []
 
     for part in parts:
         if part.startswith('（') and part.endswith('）'):
             # 处理括号内的标点
             inner_content = part[1:-1]  # 去掉括号
+            # 检查括号内是否只有标点或冒号等（内容不完整）
+            if re.fullmatch(r'[:：、，。；]+$', inner_content.strip()):
+                issues.append(f"括号内容不完整: '{part}'")
+                continue
             # 清理括号内末尾多余的标点（冒号、顿号等）
             inner_content = re.sub(r'[:：、，。；]+$', '', inner_content)
             # 如果清理后内容为空，则整个括号部分都去掉
@@ -172,6 +177,10 @@ def clean_outer_punctuation(text):
         else:
             cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
 
+    # 将问题记录到全局变量或返回，这里假设issues会被外部处理
+    if issues:
+        text = ''.join(cleaned_parts)
+        return text, issues
     return ''.join(cleaned_parts)
 
 
