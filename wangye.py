@@ -12,7 +12,6 @@ import base64
 import sys
 from io import BytesIO
 
-
 # ============================
 # 初始化设置
 # ============================
@@ -136,82 +135,32 @@ def normalize_brackets(text):
     text = re.sub(r'[<《]', '（', text)  # 左书名号替换为左括号
     text = re.sub(r'[>》]', '）', text)  # 右书名号替换为右括号
 
+    # 补全普通括号
+    if '（' in text and '）' not in text:
+        text += '）'
+    if '）' in text and '（' not in text:
+        text = '（' + text
 
-def remove_unpaired_brackets(text, issues):
-    """检测并移除多余括号并记录问题"""
-    stack = []
-    new_text = []
-    for i, char in enumerate(text):
-        if char == '（':
-            stack.append('（')
-            new_text.append(char)
-        elif char == '）':
-            if stack:
-                stack.pop()
-                new_text.append(char)
-            else:
-                issues.append("存在多余的右括号")
-                # 不添加该多余括号
-        else:
-            new_text.append(char)
+    # 处理连续右括号
+    text = REGEX_PATTERNS['consecutive_right'].sub('）', text)
 
-    # 如果还有多余的左括号
-    if stack:
-        count = len(stack)
-        issues.append(f"存在多余的左括号 {count} 个")
-        # 移除多余的左括号，从左往右删除未配对的‘（’
-        result = []
-        unmatched_left = count
-        for char in new_text:
-            if char == '（' and unmatched_left > 0:
-                unmatched_left -= 1
-                continue  # 跳过多余的左括号
-            result.append(char)
-        return ''.join(result)
-    return ''.join(new_text)
+    return text
 
 
 def clean_outer_punctuation(text):
-    """清理最外层括号外的标点符号以及括号内多余标点"""
+    """清理最外层括号外的标点符号"""
     if pd.isna(text) or not str(text).strip():
-        return text, []
-
+        return text
     text = str(text).strip()
-    issues = []
-
-    # 处理括号外的标点
     text = REGEX_PATTERNS['outer_punct'].sub('', text)
     parts = re.split(r'(（.*?）)', text)
     cleaned_parts = []
-
     for part in parts:
         if part.startswith('（') and part.endswith('）'):
-            inner_content = part[1:-1]
-            original_inner = inner_content
-
-            # 括号内只有标点或冒号：属于内容不完整
-            if re.fullmatch(r'[:：、，。；]+', inner_content.strip()):
-                issues.append(f"括号内容不完整: '{part}'")
-                continue
-
-            # 清理末尾多余标点
-            cleaned_inner = re.sub(r'[:：、，。；]+$', '', inner_content)
-
-            if not cleaned_inner.strip():
-                continue
-
-            # 如果末尾的标点被删了，记录这个清理动作
-            if inner_content != cleaned_inner:
-                deleted = inner_content[len(cleaned_inner):]
-                issues.append(f"括号内容不完整或多余标点")
-
-            cleaned_parts.append(f'（{cleaned_inner}）')
+            cleaned_parts.append(part)
         else:
             cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
-
-    return ''.join(cleaned_parts), issues
-
-
+    return ''.join(cleaned_parts)
 
 
 def check_score_consistency(row):
@@ -241,14 +190,9 @@ def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
 
-    text = str(text).strip()
-    original = text
-    issues = []
-
     # 1. 括号规范化
     text = normalize_brackets(text)
-    if text is None:
-        text = ''
+    text = clean_outer_punctuation(text)
     original = text
     issues = []
 
@@ -256,35 +200,7 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 先处理外层标点（解包返回值）
-    cleaned_text, outer_issues = clean_outer_punctuation(text)
-    if outer_issues:
-        issues.extend(outer_issues)
-    text = cleaned_text
-    if text is None:
-        text = ''
-
-    # 记录括号数
-    original_left = text.count('（')
-    original_right = text.count('）')
-
-    # 标准化全角括号
-    text2 = normalize_brackets(text)
-    if text2 is None:
-        text2 = ''
-    if text2 != text:
-        issues.append("存在非标准括号（已替换为全角）")
-    text = text2
-
-    # 再次清理外层标点（解包返回值）
-    text2, _ = clean_outer_punctuation(text)
-    if text2 is None:
-        text2 = ''
-    if text2 != text:
-        issues.append("存在外围标点或空格（已清理）")
-    text = text2
-
-    # 括号缺失补全
+    # 括号匹配补全
     left, right = text.count('（'), text.count('）')
     if left != right:
         if left > right:
@@ -294,18 +210,13 @@ def analyze_and_fix(text):
             text = '（' * (right - left) + text
             issues.append(f"补充缺失左括号 {right - left} 个")
 
-    # 处理多余括号
-    text2 = remove_unpaired_brackets(text, issues)
-    if text2 != text:
-        text = text2  # 函数内已记录问题
-
-    # 嵌套括号
+    # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
     if text2 != text:
         issues.append("存在嵌套括号")
     text = text2
 
-    # 重复括号内容
+    # 处理重复括号内容
     text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
     if n > 0:
         issues.append("存在重复括号内容")
@@ -315,9 +226,9 @@ def analyze_and_fix(text):
         c = m.group(1)
         f = c.strip('，、,;；')
         if f != c:
-            if c and c[0] in '，、,;；':
+            if c[0] in '，、,;；':
                 issues.append(f"括号内容开头多标点：'{c}'")
-            if c and c[-1] in '，、,;；':
+            if c[-1] in '，、,;；':
                 issues.append(f"括号内容结尾多标点：'{c}'")
         return f'（{f}）'
 
@@ -339,21 +250,20 @@ def analyze_and_fix(text):
     # 简化多余标点
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
 
-    # 相似重复检测（原文比对）
+    # 相似重复检测
     contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
     for i in range(len(contents)):
         for j in range(i + 1, len(contents)):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
 
-    # 错别字字典替换
+    # 规则字典校正
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
-
 
 
 def process_chunk(chunk):
@@ -411,8 +321,6 @@ def process_chunk(chunk):
     return chunk
 
 
-
-
 # ============================
 # 院校分提取相关函数
 # ============================
@@ -425,6 +333,7 @@ columns_to_convert = [
     '专业组代码', '专业代码', '招生代码', '最高分', '最低分', '平均分', '最低分位次（选填）',
     '招生人数（选填）'
 ]
+
 
 def process_score_file(file_path):
     try:
@@ -448,7 +357,6 @@ def process_score_file(file_path):
 
     df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
     df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
-    df['招生人数（选填）'] = pd.to_numeric(df['招生人数（选填）'], errors='coerce')
     df['录取人数（选填）'] = pd.to_numeric(df['录取人数（选填）'], errors='coerce')
     df = df.dropna(subset=['最低分'])
 
@@ -456,17 +364,6 @@ def process_score_file(file_path):
         raise Exception("数据处理后为空。")
 
     df['招生类型（选填）'] = df['招生类型（选填）'].replace([None], '')
-
-    # 首选科目转换逻辑
-    if '首选科目' in df.columns:
-        df['首选科目'] = df['首选科目'].str.strip()  # 去除前后空格
-        df['首选科目'] = df['首选科目'].replace({
-            '历': '历史',
-            '物': '物理',
-            '历史': '历史',  # 确保已经是"历史"的不变
-            '物理': '物理'  # 确保已经是"物理"的不变
-        })
-
 
     try:
         # 分组字段（含专业组代码）
@@ -481,23 +378,14 @@ def process_score_file(file_path):
         # 取最低分行数据
         result = df.loc[min_indices].copy()
 
-        # 招生人数为分组总和
-        enroll_groups = df.groupby(group_with_code)['招生人数（选填）'].sum()
-
         # 录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
 
-        def get_group_total(row, column_name):
+        def get_group_total(row):
             key = tuple(row[col] for col in group_with_code)
-            if column_name == '招生人数（选填）':
-                return code_groups.get(key, '')
-            elif column_name == '录取人数（选填）':
-                return enroll_groups.get(key, '')
-            return ''
+            return code_groups.get(key, '')
 
-        result['招生人数（选填）'] = result.apply(lambda row: get_group_total(row, '招生人数（选填）'), axis=1)
-        result['录取人数（选填）'] = result.apply(lambda row: get_group_total(row, '录取人数（选填）'), axis=1)
-
+        result['录取人数（选填）'] = result.apply(get_group_total, axis=1)
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
@@ -505,8 +393,9 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 保留期望列，但排除招生专业和专业方向、专业备注、选科要求、次选科目
-    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）', '选科要求', '次选科目']]
+    # 保留期望列，但排除招生专业和专业方向，新增'组内最高分'列
+    selected_columns = [col for col in expected_columns if
+                        col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -526,12 +415,14 @@ def process_score_file(file_path):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                    for cell in \
+                    list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
     except Exception as e:
         raise Exception(f"文件保存失败：{e}")
+
 
 # ============================
 # 保持文本格式
@@ -590,6 +481,7 @@ def process_remarks_file(file_path, progress_callback=None):
     except Exception as e:
         raise Exception(f"保存文件错误：{e}")
     return output_path
+
 
 # ============================
 # 一分一段数据处理
@@ -838,6 +730,9 @@ def fuzzy_match(row, b_dict):
 
 def process_data(dfA, dfB):
     # 确保导入所需库
+    import pandas as pd
+    import re
+    from difflib import SequenceMatcher
 
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
@@ -875,7 +770,6 @@ def process_data(dfA, dfB):
     return dfA
 
 
-
 # ============================
 # Streamlit页面布局
 # ============================
@@ -892,13 +786,11 @@ with st.expander("📌 功能说明", expanded=True):
     """)
 
 # 更新日志对话框
-with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
+with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
     st.markdown("""
-    ### 2025.6.14更新
-    专业组代码匹配功能  
-      - 需要上传专业分导入模板和库中招生计划导出模板
-      - 把库中导出招生计划类型尽量补充完整，否则容易出错
-      - 匹配结果需要检查
+    ### 2025.6.12更新
+    院校分提取逻辑更新  
+      - 提取最高分时会取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
 
     ### 历史更新
 
@@ -928,21 +820,17 @@ with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
       - 可直接校验分数、累计人数  
       - 自动补断点  
       - 自动增加"最高分——满分"的区间（上海满分660，海南满分900）  
-      
+
     ### 2025.6.6更新
     "一分一段数据处理"优化  
       - 自动补充"最高分——满分"的区间（上海满分660，海南满分900）  
       - 只有累计人数没有人数时，可计算人数，无需手动操作  
       - 补断点的分数标注颜色，并在分数和人数校验中标注"补断点"
-    
-    ### 2025.6.12更新
-    院校分提取逻辑更新  
-      - 提取最高分改为取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
-    
+
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）"])
+tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（未测试，不可以用！）"])
 
 # ====================== 院校分提取 ======================
 with tab1:
@@ -1097,10 +985,9 @@ with tab3:
             except Exception as e:
                 st.error(f"处理过程中发生错误: {str(e)}")
 
-
 # ====================== 专业组代码匹配 ======================
 with tab4:
-    st.header("专业组代码匹配（需要检查！）")
+    st.header("专业组代码匹配")
 
     uploaded_fileA = st.file_uploader("上传专业分导入模板", type=["xls", "xlsx"], key="fileA")
     uploaded_fileB = st.file_uploader("上传招生计划数据导出文件", type=["xls", "xlsx"], key="fileB")
@@ -1159,7 +1046,6 @@ with tab4:
                 st.error(f"处理错误：{e}")
     else:
         st.info("请先上传两个Excel文件")
-
 
 # 页脚
 st.markdown("---")
