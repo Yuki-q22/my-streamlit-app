@@ -188,42 +188,36 @@ def check_score_consistency(row):
 
 
 def analyze_and_fix(text):
+    issues = []
     if pd.isna(text) or not str(text).strip():
-        return text, []
+        return text, issues
 
-    # 1. 标准化括号和外部多余标点清理
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
-    original = text
-    issues = []
 
-    if text in CUSTOM_WHITELIST:
-        return text, []
+    # 1. 先检测括号匹配状态
+    def check_balance(s):
+        stack = []
+        for ch in s:
+            if ch == '（':
+                stack.append(ch)
+            elif ch == '）':
+                if stack:
+                    stack.pop()
+                else:
+                    return False
+        return len(stack) == 0
 
-    # 2. 括号匹配检测，补全并提示
-    stack = []
-    mismatch_detected = False
-    for i, ch in enumerate(text):
-        if ch == '（':
-            stack.append(i)
-        elif ch == '）':
-            if stack:
-                stack.pop()
-            else:
-                mismatch_detected = True  # 多余右括号
-                break
-    if stack or mismatch_detected:
-        mismatch_detected = True
+    if not check_balance(text):
         issues.append("括号不匹配：缺失或多余括号")
+
         # 补全括号
-        left_count = text.count('（')
-        right_count = text.count('）')
-        if left_count > right_count:
-            diff = left_count - right_count
-            text += '）' * diff
-        elif right_count > left_count:
-            diff = right_count - left_count
-            text = '（' * diff + text
+        left = text.count('（')
+        right = text.count('）')
+        if left > right:
+            text += '）' * (left - right)
+        elif right > left:
+            text = '（' * (right - left) + text
 
     # 3. 嵌套括号和重复括号内容检测
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
