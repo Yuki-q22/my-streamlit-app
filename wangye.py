@@ -201,15 +201,39 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 括号匹配补全
-    left, right = text.count('（'), text.count('）')
-    if left != right:
-        if left > right:
-            text += '）' * (left - right)
-            issues.append(f"补充缺失右括号 {left - right} 个")
-        else:
-            text = '（' * (right - left) + text
-            issues.append(f"补充缺失左括号 {right - left} 个")
+    # 精准判断括号是否缺失
+    left_positions = [m.start() for m in re.finditer('（', text)]
+    right_positions = [m.start() for m in re.finditer('）', text)]
+
+    # 简单判断：如果左右括号数量不等，且位置不匹配才补全
+    # 先判断数量是否匹配
+    left_count = len(left_positions)
+    right_count = len(right_positions)
+    if left_count != right_count:
+        # 再判断括号的匹配关系（简单层次）
+        # 这里用栈模拟匹配，发现真正未匹配的才补
+        stack = []
+        mismatch = False
+        for i, ch in enumerate(text):
+            if ch == '（':
+                stack.append(i)
+            elif ch == '）':
+                if stack:
+                    stack.pop()
+                else:
+                    mismatch = True
+                    break
+        # 如果栈非空或者 mismatch = True，说明有不匹配
+        if stack or mismatch:
+            if left_count > right_count:
+                diff = left_count - right_count
+                text += '）' * diff
+                issues.append(f"补充缺失右括号 {diff} 个")
+            else:
+                diff = right_count - left_count
+                text = '（' * diff + text
+                issues.append(f"补充缺失左括号 {diff} 个")
+    # else数量相等且基本匹配，不补全，不误判
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
@@ -222,14 +246,14 @@ def analyze_and_fix(text):
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 括号内容清洗
+    # 括号内容清洗，并对多余标点提示
     def fix_paren(m):
         c = m.group(1)
-        f = c.strip('，、,;；')
+        f = c.strip('，、,;；:')
         if f != c:
-            if c[0] in '，、,;；':
+            if c[0] in '，、,;；:':
                 issues.append(f"括号内容开头多标点：'{c}'")
-            if c[-1] in '，、,;；':
+            if c[-1] in '，、,;；:':
                 issues.append(f"括号内容结尾多标点：'{c}'")
         return f'（{f}）'
 
@@ -320,8 +344,6 @@ def process_chunk(chunk):
             lambda x: str(x)[0] if x in ['物理类', '历史类'] else "")
 
     return chunk
-
-
 
 
 
