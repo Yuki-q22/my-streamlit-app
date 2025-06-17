@@ -180,7 +180,7 @@ def clean_outer_punctuation(text):
             # 如果末尾的标点被删了，记录这个清理动作
             if inner_content != cleaned_inner:
                 deleted = inner_content[len(cleaned_inner):]
-                issues.append(f"括号内容不完整标点")
+                issues.append(f"括号内容不完整或多余标点")
 
             cleaned_parts.append(f'（{cleaned_inner}）')
         else:
