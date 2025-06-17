@@ -191,7 +191,7 @@ def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
 
-    # 1. 标准化括号和外部多余标点清理
+    # 初始处理（保持不变）
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
     original = text
@@ -200,52 +200,49 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 2. 括号匹配检测，补全并提示
+    # 2. 精确的括号匹配检测
     stack = []
-    mismatch_detected = False
-    extra_right = 0
-    extra_left = 0
+    extra_right_positions = []
 
-    for ch in text:
-        if ch == '（':
-            stack.append(ch)
-        elif ch == '）':
+    # 第一遍扫描：记录所有不匹配的右括号位置
+    for i, char in enumerate(text):
+        if char == '（':
+            stack.append(i)  # 存储左括号位置
+        elif char == '）':
             if stack:
                 stack.pop()
             else:
-                extra_right += 1
-                mismatch_detected = True
+                extra_right_positions.append(i)  # 记录多余右括号位置
 
-    if stack:
-        extra_left = len(stack)
-        mismatch_detected = True
-
-    if mismatch_detected:
+    # 生成问题描述
+    if stack or extra_right_positions:
         issue_msg = "括号不匹配："
-        if extra_left > 0:
-            issue_msg += f"缺少{extra_left}个右括号"
-        if extra_right > 0:
-            if extra_left > 0:
-                issue_msg += "，"
-            issue_msg += f"多余{extra_right}个右括号"
+        details = []
+        if stack:
+            details.append(f"缺少{len(stack)}个右括号")
+        if extra_right_positions:
+            details.append(f"多余{len(extra_right_positions)}个右括号")
+        issue_msg += "，".join(details)
         issues.append(issue_msg)
 
-        # 补全括号
-        if extra_left > 0:
-            text += '）' * extra_left
-        if extra_right > 0:
-            # 删除多余的右括号
-            text = text.replace('）', '', extra_right)
+        # 精确修正（保持原始文本结构）
+        text_list = list(text)
 
-        # 3. 嵌套括号和重复括号内容检测
-        text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
-        if text2 != text:
+        # 先删除多余的右括号（从后往前删除避免影响索引）
+        for pos in sorted(extra_right_positions, reverse=True):
+            if pos < len(text_list):
+                text_list.pop(pos)
+
+        # 再补全缺少的右括号
+        if stack:
+            text_list.extend(['）'] * len(stack))
+
+        text = ''.join(text_list)
+
+        # 3. 嵌套括号检测
+        if '（（' in text or '））' in text:
             issues.append("存在嵌套括号")
-        text = text2
-
-        text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
-        if n > 0:
-            issues.append("存在重复括号内容")
+            text = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
 
     # 4. 括号内内容处理：去除首尾多余标点，并记录问题
     def fix_paren(m):
