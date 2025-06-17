@@ -214,11 +214,11 @@ def analyze_and_fix(text):
 
     if stack or extra_right_positions:
         issue_msg = "括号不匹配："
-        details = []
+        issues = []
         if stack:
-            details.append(f"缺少{len(stack)}个右括号")
+            issues.append(f"缺少{len(stack)}个右括号")
         if extra_right_positions:
-            details.append(f"多余{len(extra_right_positions)}个右括号")
+            issues.append(f"多余{len(extra_right_positions)}个右括号")
         issue_msg += "，".join(details)
         issues.append(issue_msg)
 
