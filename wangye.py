@@ -203,15 +203,21 @@ def analyze_and_fix(text):
             else:
                 extra_right_positions.append(i)
 
+    # 生成问题描述（防止重复添加）
     if stack or extra_right_positions:
-        issue_msg = "括号不匹配："
-        issues = []
-        if stack:
-            issues.append(f"缺少{len(stack)}个右括号")
-        if extra_right_positions:
-            issues.append(f"多余{len(stack)}个右括号")
-        issue_msg += "，".join(issues)
-        issues.append(issue_msg)
+        count_missing = len(stack)
+        count_extra = len(extra_right_positions)
+        detail_parts = []
+        if count_missing:
+            detail_parts.append(f"缺少{count_missing}个右括号")
+        if count_extra:
+            detail_parts.append(f"多余{count_extra}个右括号")
+
+        issue_msg = "括号不匹配：" + "，".join(detail_parts)
+
+        # 只添加一次统一说明
+        if issue_msg not in issues:
+            issues.append(issue_msg)
 
         # 修正代码保持不变
         text_list = list(text)
