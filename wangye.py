@@ -12,6 +12,7 @@ import base64
 import sys
 from io import BytesIO
 
+
 # ============================
 # 初始化设置
 # ============================
@@ -200,33 +201,15 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 用栈匹配括号
-    def check_brackets_balance(s):
-        stack = []
-        for i, ch in enumerate(s):
-            if ch == '（':
-                stack.append(i)
-            elif ch == '）':
-                if stack:
-                    stack.pop()
-                else:
-                    # 右括号多余，记录位置
-                    return False, 'right', i
-        if stack:
-            # 左括号多余，返回第一个多余左括号位置
-            return False, 'left', stack[0]
-        return True, None, None
-
-    balanced, err_type, pos = check_brackets_balance(text)
-    if not balanced:
-        if err_type == 'left':
-            # 左括号多余，补充对应右括号
-            text += '）'
-            issues.append(f"补充缺失右括号 1 个")
-        elif err_type == 'right':
-            # 右括号多余，补充对应左括号
-            text = '（' + text
-            issues.append(f"补充缺失左括号 1 个")
+    # 括号匹配补全
+    left, right = text.count('（'), text.count('）')
+    if left != right:
+        if left > right:
+            text += '）' * (left - right)
+            issues.append(f"补充缺失右括号 {left - right} 个")
+        else:
+            text = '（' * (right - left) + text
+            issues.append(f"补充缺失左括号 {right - left} 个")
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
@@ -239,27 +222,16 @@ def analyze_and_fix(text):
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 括号内容清洗：去除括号内开头和结尾多余标点，并标记删除的内容
+    # 括号内容清洗
     def fix_paren(m):
         c = m.group(1)
-        original_c = c
-        # 去除开头多余标点
-        start_punct = ''
-        while c and c[0] in '，、,;；':
-            start_punct += c[0]
-            c = c[1:]
-        if start_punct:
-            issues.append(f"括号内容开头多标点：'{start_punct}' 从 '（{original_c}）' 中删除")
-
-        # 去除结尾多余标点
-        end_punct = ''
-        while c and c[-1] in '，、,;；':
-            end_punct = c[-1] + end_punct
-            c = c[:-1]
-        if end_punct:
-            issues.append(f"括号内容结尾多标点：'{end_punct}' 从 '（{original_c}）' 中删除")
-
-        return f'（{c}）'
+        f = c.strip('，、,;；')
+        if f != c:
+            if c[0] in '，、,;；':
+                issues.append(f"括号内容开头多标点：'{c}'")
+            if c[-1] in '，、,;；':
+                issues.append(f"括号内容结尾多标点：'{c}'")
+        return f'（{f}）'
 
     text = re.sub(r'（(.*?)）', fix_paren, text)
 
@@ -293,7 +265,6 @@ def analyze_and_fix(text):
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
-
 
 
 def process_chunk(chunk):
@@ -351,6 +322,9 @@ def process_chunk(chunk):
     return chunk
 
 
+
+
+
 # ============================
 # 院校分提取相关函数
 # ============================
@@ -363,7 +337,6 @@ columns_to_convert = [
     '专业组代码', '专业代码', '招生代码', '最高分', '最低分', '平均分', '最低分位次（选填）',
     '招生人数（选填）'
 ]
-
 
 def process_score_file(file_path):
     try:
@@ -387,6 +360,7 @@ def process_score_file(file_path):
 
     df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
     df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
+    df['招生人数（选填）'] = pd.to_numeric(df['招生人数（选填）'], errors='coerce')
     df['录取人数（选填）'] = pd.to_numeric(df['录取人数（选填）'], errors='coerce')
     df = df.dropna(subset=['最低分'])
 
@@ -394,6 +368,17 @@ def process_score_file(file_path):
         raise Exception("数据处理后为空。")
 
     df['招生类型（选填）'] = df['招生类型（选填）'].replace([None], '')
+
+    # 首选科目转换逻辑
+    if '首选科目' in df.columns:
+        df['首选科目'] = df['首选科目'].str.strip()  # 去除前后空格
+        df['首选科目'] = df['首选科目'].replace({
+            '历': '历史',
+            '物': '物理',
+            '历史': '历史',  # 确保已经是"历史"的不变
+            '物理': '物理'  # 确保已经是"物理"的不变
+        })
+
 
     try:
         # 分组字段（含专业组代码）
@@ -408,14 +393,23 @@ def process_score_file(file_path):
         # 取最低分行数据
         result = df.loc[min_indices].copy()
 
+        # 招生人数为分组总和
+        enroll_groups = df.groupby(group_with_code)['招生人数（选填）'].sum()
+
         # 录取人数为分组总和
         code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
 
-        def get_group_total(row):
+        def get_group_total(row, column_name):
             key = tuple(row[col] for col in group_with_code)
-            return code_groups.get(key, '')
+            if column_name == '招生人数（选填）':
+                return code_groups.get(key, '')
+            elif column_name == '录取人数（选填）':
+                return enroll_groups.get(key, '')
+            return ''
 
-        result['录取人数（选填）'] = result.apply(get_group_total, axis=1)
+        result['招生人数（选填）'] = result.apply(lambda row: get_group_total(row, '招生人数（选填）'), axis=1)
+        result['录取人数（选填）'] = result.apply(lambda row: get_group_total(row, '录取人数（选填）'), axis=1)
+
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
@@ -423,9 +417,8 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 保留期望列，但排除招生专业和专业方向，新增'组内最高分'列
-    selected_columns = [col for col in expected_columns if
-                        col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）']]
+    # 保留期望列，但排除招生专业和专业方向、专业备注、选科要求、次选科目
+    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）', '选科要求', '次选科目']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -445,14 +438,12 @@ def process_score_file(file_path):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for cell in \
-                    list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
     except Exception as e:
         raise Exception(f"文件保存失败：{e}")
-
 
 # ============================
 # 保持文本格式
@@ -511,7 +502,6 @@ def process_remarks_file(file_path, progress_callback=None):
     except Exception as e:
         raise Exception(f"保存文件错误：{e}")
     return output_path
-
 
 # ============================
 # 一分一段数据处理
@@ -760,9 +750,6 @@ def fuzzy_match(row, b_dict):
 
 def process_data(dfA, dfB):
     # 确保导入所需库
-    import pandas as pd
-    import re
-    from difflib import SequenceMatcher
 
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
@@ -800,6 +787,7 @@ def process_data(dfA, dfB):
     return dfA
 
 
+
 # ============================
 # Streamlit页面布局
 # ============================
@@ -816,11 +804,13 @@ with st.expander("📌 功能说明", expanded=True):
     """)
 
 # 更新日志对话框
-with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
+with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
     st.markdown("""
-    ### 2025.6.12更新
-    院校分提取逻辑更新  
-      - 提取最高分时会取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
+    ### 2025.6.14更新
+    专业组代码匹配功能  
+      - 需要上传专业分导入模板和库中招生计划导出模板
+      - 把库中导出招生计划类型尽量补充完整，否则容易出错
+      - 匹配结果需要检查
 
     ### 历史更新
 
@@ -850,17 +840,21 @@ with st.expander("📢 版本更新（2025.6.12更新）", expanded=False):
       - 可直接校验分数、累计人数  
       - 自动补断点  
       - 自动增加"最高分——满分"的区间（上海满分660，海南满分900）  
-
+      
     ### 2025.6.6更新
     "一分一段数据处理"优化  
       - 自动补充"最高分——满分"的区间（上海满分660，海南满分900）  
       - 只有累计人数没有人数时，可计算人数，无需手动操作  
       - 补断点的分数标注颜色，并在分数和人数校验中标注"补断点"
-
+    
+    ### 2025.6.12更新
+    院校分提取逻辑更新  
+      - 提取最高分改为取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
+    
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（未测试，不可以用！）"])
+tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）"])
 
 # ====================== 院校分提取 ======================
 with tab1:
@@ -1015,9 +1009,10 @@ with tab3:
             except Exception as e:
                 st.error(f"处理过程中发生错误: {str(e)}")
 
+
 # ====================== 专业组代码匹配 ======================
 with tab4:
-    st.header("专业组代码匹配")
+    st.header("专业组代码匹配（需要检查！）")
 
     uploaded_fileA = st.file_uploader("上传专业分导入模板", type=["xls", "xlsx"], key="fileA")
     uploaded_fileB = st.file_uploader("上传招生计划数据导出文件", type=["xls", "xlsx"], key="fileB")
@@ -1076,6 +1071,7 @@ with tab4:
                 st.error(f"处理错误：{e}")
     else:
         st.info("请先上传两个Excel文件")
+
 
 # 页脚
 st.markdown("---")
