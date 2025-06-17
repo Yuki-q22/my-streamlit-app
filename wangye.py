@@ -149,10 +149,12 @@ def normalize_brackets(text):
 
 
 def clean_outer_punctuation(text):
-    """清理最外层括号外的标点符号以及括号内多余标点"""
+    """清理最外层括号外的标点符号以及括号内多余标点，并标注是否完整"""
     if pd.isna(text) or not str(text).strip():
-        return text
+        return text, True  # 空值视为完整（或可根据需求调整）
+
     text = str(text).strip()
+    is_complete = True  # 初始假设内容完整
 
     # 先处理括号外的标点
     text = REGEX_PATTERNS['outer_punct'].sub('', text)
@@ -161,18 +163,25 @@ def clean_outer_punctuation(text):
 
     for part in parts:
         if part.startswith('（') and part.endswith('）'):
-            # 处理括号内的标点
             inner_content = part[1:-1]  # 去掉括号
-            # 清理括号内末尾多余的标点（冒号、顿号等）
-            inner_content = re.sub(r'[:：、，。；]+$', '', inner_content)
-            # 如果清理后内容为空，则整个括号部分都去掉
+
+            # 检查括号内是否以标点结尾（如 `（办学地点：）`）
+            if re.search(r'[:：、，。；？！…]+$', inner_content):
+                is_complete = False  # 标记为不完整
+                # 清理末尾标点
+                inner_content = re.sub(r'[:：、，。；？！…]+$', '', inner_content)
+
+            # 如果清理后内容为空，则整个括号部分去掉，并标记不完整
             if not inner_content.strip():
+                is_complete = False
                 continue
+
             cleaned_parts.append(f'（{inner_content}）')
         else:
             cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
 
-    return ''.join(cleaned_parts)
+    cleaned_text = ''.join(cleaned_parts)
+    return cleaned_text, is_complete
 
 
 def check_score_consistency(row):
