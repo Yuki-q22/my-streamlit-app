@@ -149,46 +149,39 @@ def normalize_brackets(text):
 
 
 def clean_outer_punctuation(text):
-    """清理最外层括号外的标点符号以及括号内多余标点，并标记内容是否不完整"""
+    """清理最外层括号外的标点符号以及括号内多余标点，并标注是否完整"""
     if pd.isna(text) or not str(text).strip():
-        return text, False
+        return text, True  # 空值视为完整（或可根据需求调整）
 
     text = str(text).strip()
-    original_text = text  # 保留原始文本做对比
-    has_issue = False
+    is_complete = True  # 初始假设内容完整
 
     # 先处理括号外的标点
-    cleaned_text = REGEX_PATTERNS['outer_punct'].sub('', text)
-    parts = re.split(r'(（.*?）)', cleaned_text)
+    text = REGEX_PATTERNS['outer_punct'].sub('', text)
+    parts = re.split(r'(（.*?）)', text)
     cleaned_parts = []
 
     for part in parts:
         if part.startswith('（') and part.endswith('）'):
             inner_content = part[1:-1]  # 去掉括号
-            new_inner = re.sub(r'[:：、，。；]+$', '', inner_content)
 
-            if new_inner != inner_content:
-                has_issue = True  # 括号内清理了标点
+            # 检查括号内是否以标点结尾（如 `（办学地点：）`）
+            if re.search(r'[:：、，。；？！…]+$', inner_content):
+                is_complete = False  # 标记为不完整
+                # 清理末尾标点
+                inner_content = re.sub(r'[:：、，。；？！…]+$', '', inner_content)
 
-            if not new_inner.strip():
-                has_issue = True  # 清理后为空，说明括号内容无效
-                continue  # 丢弃该部分
+            # 如果清理后内容为空，则整个括号部分去掉，并标记不完整
+            if not inner_content.strip():
+                is_complete = False
+                continue
 
-            cleaned_parts.append(f'（{new_inner}）')
+            cleaned_parts.append(f'（{inner_content}）')
         else:
-            outer_cleaned = REGEX_PATTERNS['outer_punct'].sub('', part)
-            if outer_cleaned != part:
-                has_issue = True  # 括号外也清理了标点
-            cleaned_parts.append(outer_cleaned)
+            cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
 
-    final_text = ''.join(cleaned_parts)
-
-    # 如果清理前后文本不同，也说明有修改
-    if final_text != original_text:
-        has_issue = True
-
-    return final_text, has_issue
-
+    cleaned_text = ''.join(cleaned_parts)
+    return cleaned_text, is_complete
 
 
 def check_score_consistency(row):
