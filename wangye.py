@@ -136,6 +136,17 @@ def normalize_brackets(text):
     text = re.sub(r'[<《]', '（', text)  # 左书名号替换为左括号
     text = re.sub(r'[>》]', '）', text)  # 右书名号替换为右括号
 
+    # 补全普通括号
+    if '（' in text and '）' not in text:
+        text += '）'
+    if '）' in text and '（' not in text:
+        text = '（' + text
+
+    # 处理连续右括号
+    text = REGEX_PATTERNS['consecutive_right'].sub('）', text)
+
+    return text
+
 
 def clean_outer_punctuation(text):
     """清理最外层括号外的标点符号以及括号内多余标点"""
