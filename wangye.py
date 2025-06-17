@@ -845,7 +845,7 @@ with st.expander("📌 功能说明", expanded=True):
     """)
 
 # 更新日志对话框
-with st.expander("📢 版本更新（2025.6.141更新）", expanded=False):
+with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
     st.markdown("""
     ### 2025.6.14更新
     专业组代码匹配功能  
