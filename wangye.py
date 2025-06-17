@@ -240,6 +240,9 @@ def check_score_consistency(row):
 def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
+    text = str(text).strip()
+    original = text
+    issues = []
 
     # 1. 括号规范化
     text = normalize_brackets(text)
