@@ -200,15 +200,33 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 括号匹配补全
-    left, right = text.count('（'), text.count('）')
-    if left != right:
-        if left > right:
-            text += '）' * (left - right)
-            issues.append(f"补充缺失右括号 {left - right} 个")
-        else:
-            text = '（' * (right - left) + text
-            issues.append(f"补充缺失左括号 {right - left} 个")
+    # 用栈匹配括号
+    def check_brackets_balance(s):
+        stack = []
+        for i, ch in enumerate(s):
+            if ch == '（':
+                stack.append(i)
+            elif ch == '）':
+                if stack:
+                    stack.pop()
+                else:
+                    # 右括号多余，记录位置
+                    return False, 'right', i
+        if stack:
+            # 左括号多余，返回第一个多余左括号位置
+            return False, 'left', stack[0]
+        return True, None, None
+
+    balanced, err_type, pos = check_brackets_balance(text)
+    if not balanced:
+        if err_type == 'left':
+            # 左括号多余，补充对应右括号
+            text += '）'
+            issues.append(f"补充缺失右括号 1 个")
+        elif err_type == 'right':
+            # 右括号多余，补充对应左括号
+            text = '（' + text
+            issues.append(f"补充缺失左括号 1 个")
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
@@ -221,16 +239,27 @@ def analyze_and_fix(text):
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 括号内容清洗
+    # 括号内容清洗：去除括号内开头和结尾多余标点，并标记删除的内容
     def fix_paren(m):
         c = m.group(1)
-        f = c.strip('，、,;；')
-        if f != c:
-            if c[0] in '，、,;；':
-                issues.append(f"括号内容开头多标点：'{c}'")
-            if c[-1] in '，、,;；':
-                issues.append(f"括号内容结尾多标点：'{c}'")
-        return f'（{f}）'
+        original_c = c
+        # 去除开头多余标点
+        start_punct = ''
+        while c and c[0] in '，、,;；':
+            start_punct += c[0]
+            c = c[1:]
+        if start_punct:
+            issues.append(f"括号内容开头多标点：'{start_punct}' 从 '（{original_c}）' 中删除")
+
+        # 去除结尾多余标点
+        end_punct = ''
+        while c and c[-1] in '，、,;；':
+            end_punct = c[-1] + end_punct
+            c = c[:-1]
+        if end_punct:
+            issues.append(f"括号内容结尾多标点：'{end_punct}' 从 '（{original_c}）' 中删除")
+
+        return f'（{c}）'
 
     text = re.sub(r'（(.*?)）', fix_paren, text)
 
@@ -264,6 +293,7 @@ def analyze_and_fix(text):
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
+
 
 
 def process_chunk(chunk):
