@@ -188,104 +188,106 @@ def check_score_consistency(row):
 
 
 def analyze_and_fix(text):
-    issues = []
     if pd.isna(text) or not str(text).strip():
-        return text, issues
+        return text, []
 
+    # 1. 括号规范化
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
+    original = text
+    issues = []
 
-    # 1. 先检测括号匹配状态
-    def check_balance(s):
-        stack = []
-        for ch in s:
-            if ch == '（':
-                stack.append(ch)
-            elif ch == '）':
-                if stack:
-                    stack.pop()
-                else:
-                    return False
-        return len(stack) == 0
+    # 白名单跳过
+    if text in CUSTOM_WHITELIST:
+        return text, []
 
-    if not check_balance(text):
+    # --------------------
+    # 新增：括号匹配检测和补全
+    left, right = text.count('（'), text.count('）')
+
+    # 检测括号是否平衡（不完全用count判断，因为）可能多余出现）
+    # 这里用栈方式检测多余右括号
+    stack = []
+    mismatch = False
+    for ch in text:
+        if ch == '（':
+            stack.append(ch)
+        elif ch == '）':
+            if stack:
+                stack.pop()
+            else:
+                mismatch = True  # 多余右括号
+                break
+    if not mismatch and len(stack) == 0:
+        pass  # 括号匹配正常
+    else:
+        mismatch = True
+
+    if mismatch:
         issues.append("括号不匹配：缺失或多余括号")
-
         # 补全括号
-        left = text.count('（')
-        right = text.count('）')
         if left > right:
             text += '）' * (left - right)
         elif right > left:
             text = '（' * (right - left) + text
+    # --------------------
 
-    # 3. 嵌套括号和重复括号内容检测
+    # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
     if text2 != text:
         issues.append("存在嵌套括号")
     text = text2
 
+    # 处理重复括号内容
     text, n = CONSECUTIVE_REPEAT_PATTERN.subn(r'（\1）', text)
     if n > 0:
         issues.append("存在重复括号内容")
 
-    # 4. 括号内内容处理：去除首尾多余标点，并记录问题
+    # 括号内容清洗
     def fix_paren(m):
-        content = m.group(1)
-        orig_content = content
-        # 定义允许的标点清单，这里加上中文半角冒号等
-        puncts = '，、,;；:：。！？.!?'
-
-        # 去除首尾多余标点
-        start_strip = 0
-        end_strip = len(content)
-
-        while start_strip < end_strip and content[start_strip] in puncts:
-            start_strip += 1
-        while end_strip > start_strip and content[end_strip - 1] in puncts:
-            end_strip -= 1
-        new_content = content[start_strip:end_strip]
-
-        # 记录首尾多余标点情况
-        if start_strip > 0:
-            issues.append(f"括号内容开头多标点：'{orig_content}'")
-        if end_strip < len(content):
-            issues.append(f"括号内容结尾多标点：'{orig_content}'")
-
-        return f'（{new_content}）'
+        c = m.group(1)
+        f = c.strip('，、,;；')
+        if f != c:
+            if c[0] in '，、,;；':
+                issues.append(f"括号内容开头多标点：'{c}'")
+            if c[-1] in '，、,;；':
+                issues.append(f"括号内容结尾多标点：'{c}'")
+        return f'（{f}）'
 
     text = re.sub(r'（(.*?)）', fix_paren, text)
 
-    # 5. 括号内内容去重，重复时记录问题
+    # 括号内去重
     seen = set()
 
     def dedup(m):
         c = m.group(1)
         if c in seen:
-            issues.append(f"重复括号内容：'{c}'")
-            return ''  # 去重，去掉重复括号
+            issues.append(f"重复内容：{c}")
+            return ''
         seen.add(c)
         return f'（{c}）'
 
     text = re.sub(r'（(.*?)）', dedup, text)
 
-    # 6. 多余标点简化
+    # 简化多余标点
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
 
-    # 7. 相似内容检测，记录相似重复
+    # 相似重复检测
     contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
     for i in range(len(contents)):
         for j in range(i + 1, len(contents)):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
 
-    # 8. 规则字典校正
+    # 规则字典校正
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
+
+
 
 
 def process_chunk(chunk):
