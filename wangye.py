@@ -149,30 +149,46 @@ def normalize_brackets(text):
 
 
 def clean_outer_punctuation(text):
-    """清理最外层括号外的标点符号以及括号内多余标点"""
+    """清理最外层括号外的标点符号以及括号内多余标点，并标记内容是否不完整"""
     if pd.isna(text) or not str(text).strip():
-        return text
+        return text, False
+
     text = str(text).strip()
+    original_text = text  # 保留原始文本做对比
+    has_issue = False
 
     # 先处理括号外的标点
-    text = REGEX_PATTERNS['outer_punct'].sub('', text)
-    parts = re.split(r'(（.*?）)', text)
+    cleaned_text = REGEX_PATTERNS['outer_punct'].sub('', text)
+    parts = re.split(r'(（.*?）)', cleaned_text)
     cleaned_parts = []
 
     for part in parts:
         if part.startswith('（') and part.endswith('）'):
-            # 处理括号内的标点
             inner_content = part[1:-1]  # 去掉括号
-            # 清理括号内末尾多余的标点（冒号、顿号等）
-            inner_content = re.sub(r'[:：、，。；]+$', '', inner_content)
-            # 如果清理后内容为空，则整个括号部分都去掉
-            if not inner_content.strip():
-                continue
-            cleaned_parts.append(f'（{inner_content}）')
-        else:
-            cleaned_parts.append(REGEX_PATTERNS['outer_punct'].sub('', part))
+            new_inner = re.sub(r'[:：、，。；]+$', '', inner_content)
 
-    return ''.join(cleaned_parts)
+            if new_inner != inner_content:
+                has_issue = True  # 括号内清理了标点
+
+            if not new_inner.strip():
+                has_issue = True  # 清理后为空，说明括号内容无效
+                continue  # 丢弃该部分
+
+            cleaned_parts.append(f'（{new_inner}）')
+        else:
+            outer_cleaned = REGEX_PATTERNS['outer_punct'].sub('', part)
+            if outer_cleaned != part:
+                has_issue = True  # 括号外也清理了标点
+            cleaned_parts.append(outer_cleaned)
+
+    final_text = ''.join(cleaned_parts)
+
+    # 如果清理前后文本不同，也说明有修改
+    if final_text != original_text:
+        has_issue = True
+
+    return final_text, has_issue
+
 
 
 def check_score_consistency(row):
