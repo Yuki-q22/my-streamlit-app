@@ -233,19 +233,21 @@ def analyze_and_fix(text):
             issues.extend(outer_issues)
         text = cleaned_text
 
-        # 检查括号数量是否匹配 - 修改部分开始
+        # 检查括号数量是否匹配
         left_count = text.count('（')
         right_count = text.count('）')
 
-        # 只有括号数量不匹配时才进行补全并记录问题
-        if left_count != right_count:
-            if left_count > right_count:
-                text += '）' * (left_count - right_count)
-                issues.append(f"括号数量不匹配：缺少 {left_count - right_count} 个右括号")
-            else:
-                text = '（' * (right_count - left_count) + text
-                issues.append(f"括号数量不匹配：缺少 {right_count - left_count} 个左括号")
-
+        # 补全括号，仅在原始文本左右括号数量不一致时处理
+        original_left, original_right = original.count('（'), original.count('）')
+        if original_left != original_right:
+            left, right = text.count('（'), text.count('）')
+            if left != right:
+                if left > right:
+                    text += '）' * (left - right)
+                    issues.append(f"补充缺失右括号 {left - right} 个")
+                else:
+                    text = '（' * (right - left) + text
+                    issues.append(f"补充缺失左括号 {right - left} 个")
 
     # 处理嵌套括号
     text2 = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
