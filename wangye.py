@@ -190,51 +190,50 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
+    # 第一阶段：处理多余的左括号
+    text_list = list(text)
+    i = 0
+    while i < len(text_list):
+        if text_list[i] == '（' and i + 1 < len(text_list) and text_list[i + 1] == '（':
+            # 连续两个左括号，删除第一个
+            del text_list[i]
+            issues.append("删除多余左括号1个")
+            continue
+        i += 1
+    text = ''.join(text_list)
+
+    # 第二阶段：括号匹配补全
     stack = []
     insert_positions = []
     text_list = list(text)
 
-    # 改进的括号匹配逻辑
     for i, char in enumerate(text_list):
         if char == '（':
-            # 检查是否是连续左括号（可能是嵌套结构）
-            if stack and stack[-1] == i-1:
-                # 保留嵌套结构的左括号
-                pass
             stack.append(i)
         elif char == '）':
             if stack:
                 stack.pop()
             else:
-                # 没有对应的左括号，需要在前面插入左括号
-                insert_positions.append(('left', i))
+                insert_positions.append(('left', i))  # 需要前插左括号
 
-    # 处理剩余的未匹配左括号
+    # 处理剩余未闭合的左括号
     for pos in stack:
-        # 检查是否是嵌套结构的左括号
-        if pos + 1 < len(text_list) and text_list[pos+1] == '（':
-            # 是嵌套结构，在字符串末尾插入右括号
-            insert_positions.append(('right', len(text_list)-1))
-        else:
-            # 普通左括号，在其后插入右括号
-            insert_positions.append(('right', pos))
+        insert_positions.append(('right', pos))  # 需要后插右括号
 
-    # 按照位置逆序插入，避免影响索引
+    # 按逆序插入
     insert_positions.sort(key=lambda x: x[1], reverse=True)
     for typ, pos in insert_positions:
         if typ == 'left':
             text_list.insert(pos, '（')
-            issues.append("补充缺失左括号 1 个")
+            issues.append("补充缺失左括号1个")
         else:
             text_list.insert(pos + 1, '）')
-            issues.append("补充缺失右括号 1 个")
+            issues.append("补充缺失右括号1个")
 
     text = ''.join(text_list)
 
-    # 特殊处理：合并相邻括号对
-    text = re.sub(r'（\s*）', '', text)  # 移除空括号
-    text = re.sub(r'）（', '', text)    # 合并相邻括号
-
+    # 确保不会出现空括号
+    text = re.sub(r'（\s*）', '', text)
 
     # 嵌套括号检测与修复
     nested_pairs = 0
