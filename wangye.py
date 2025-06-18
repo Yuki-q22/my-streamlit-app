@@ -192,32 +192,28 @@ def analyze_and_fix(text):
 
     # 括号配对修复
     stack = []
+    insert_positions = []
     text_list = list(text)
-    issues = []
 
-    pairs = []  # 存放配对成功的括号索引对
-    unmatched_right = []  # 存放未匹配右括号的位置
+    pairs = []
+    unmatched_right = []
 
     for i, char in enumerate(text_list):
         if char == '（':
             stack.append(i)
         elif char == '）':
             if stack:
-                left_pos = stack.pop()
-                pairs.append((left_pos, i))
+                left = stack.pop()
+                pairs.append((left, i))
             else:
                 unmatched_right.append(i)
 
-    # 此时 stack 中是未匹配的左括号，unmatched_right 是未匹配的右括号
-    insert_positions = []
-
     for pos in unmatched_right:
-        insert_positions.append(('left', pos))  # 在右括号前补左括号
+        insert_positions.append(('left', pos))
 
     for pos in stack:
-        insert_positions.append(('right', pos))  # 在左括号后补右括号
+        insert_positions.append(('right', pos))
 
-    # 按插入顺序逆序处理
     insert_positions.sort(key=lambda x: x[1], reverse=True)
     for typ, pos in insert_positions:
         if typ == 'left':
