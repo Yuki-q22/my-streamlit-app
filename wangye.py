@@ -191,49 +191,33 @@ def analyze_and_fix(text):
         return text, []
 
     stack = []
-    valid_pairs = []
-    unmatched_right = []
+    insert_positions = []
+    text_list = list(text)
 
-    for i, char in enumerate(text):
+    for i, char in enumerate(text_list):
         if char == '（':
             stack.append(i)
         elif char == '）':
             if stack:
-                left_pos = stack.pop()
-                valid_pairs.append((left_pos, i))
+                stack.pop()
             else:
-                unmatched_right.append(i)  # 多余右括号
+                insert_positions.append(('left', i))  # 需要在前面插入左括号
 
-    unmatched_left = stack  # 剩余未配对的左括号
+    # 剩余未配对的左括号，需要在其后插入右括号
+    for pos in stack:
+        insert_positions.append(('right', pos))
 
-    # 生成问题描述
-    if unmatched_left or unmatched_right:
-        details = []
-        if unmatched_left:
-            details.append(f"多余{len(unmatched_left)}个左括号")
-        if unmatched_right:
-            details.append(f"多余{len(unmatched_right)}个右括号")
-        issues.append("括号不匹配：" + "，".join(details))
+    # 按照位置逆序插入，避免影响索引
+    insert_positions.sort(key=lambda x: x[1], reverse=True)
+    for typ, pos in insert_positions:
+        if typ == 'left':
+            text_list.insert(pos, '（')
+            issues.append("补充缺失左括号 1 个")
+        else:
+            text_list.insert(pos + 1, '）')
+            issues.append("补充缺失右括号 1 个")
 
-    # 删除多余括号
-    text_list = list(text)
-    to_delete = set(unmatched_left + unmatched_right)
-    cleaned = ''.join([ch for idx, ch in enumerate(text_list) if idx not in to_delete])
-
-    # 重新计数以判断是否需要补充括号
-    left_count = cleaned.count('（')
-    right_count = cleaned.count('）')
-
-    if left_count > right_count:
-        diff = left_count - right_count
-        cleaned += '）' * diff
-        issues.append(f"补充缺失右括号 {diff} 个")
-    elif right_count > left_count:
-        diff = right_count - left_count
-        cleaned = '（' * diff + cleaned
-        issues.append(f"补充缺失左括号 {diff} 个")
-
-    text = cleaned  # ✅ 关键：将修复后的内容替换 text，确保后续逻辑生效
+    text = ''.join(text_list)
 
     # 嵌套括号检测与修复（独立判断）
     nested_pairs = 0
