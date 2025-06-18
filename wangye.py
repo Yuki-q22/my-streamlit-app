@@ -193,28 +193,31 @@ def analyze_and_fix(text):
     stack = []
     insert_positions = []
     text_list = list(text)
+    i = 0
 
     # 改进的括号匹配逻辑
-    for i, char in enumerate(text_list):
+    while i < len(text_list):
+        char = text_list[i]
         if char == '（':
-            stack.append(i)  # 存储左括号位置
+            # 检查是否是多余的左括号（前面已经有左括号）
+            if stack and stack[-1] == i-1:
+                # 连续左括号，删除多余的
+                del text_list[i]
+                issues.append("删除多余左括号 1 个")
+                continue  # 不增加i，因为删除了一个字符
+            stack.append(i)
         elif char == '）':
             if stack:
-                # 检查是否是最内层的右括号
-                if i + 1 < len(text_list) and text_list[i + 1] == '）':
-                    # 连续右括号，可能是嵌套结束，保留栈中位置
-                    pass
-                else:
-                    stack.pop()  # 正常匹配，弹出对应的左括号
+                stack.pop()
             else:
                 # 没有对应的左括号，需要在前面插入左括号
                 insert_positions.append(('left', i))
+        i += 1
 
     # 处理剩余的未匹配左括号
     for pos in stack:
-        # 检查是否是最外层的左括号
-        if pos == 0 or text_list[pos - 1] != '）':
-            insert_positions.append(('right', pos))  # 在左括号后插入右括号
+        # 在左括号后插入右括号
+        insert_positions.append(('right', pos))
 
     # 按照位置逆序插入，避免影响索引
     insert_positions.sort(key=lambda x: x[1], reverse=True)
@@ -223,7 +226,6 @@ def analyze_and_fix(text):
             text_list.insert(pos, '（')
             issues.append("补充缺失左括号 1 个")
         else:
-            # 在左括号后插入右括号
             text_list.insert(pos + 1, '）')
             issues.append("补充缺失右括号 1 个")
 
