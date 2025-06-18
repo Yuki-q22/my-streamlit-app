@@ -199,16 +199,26 @@ def analyze_and_fix(text):
     while i < len(text_list):
         char = text_list[i]
         if char == '（':
-            # 检查是否是多余的左括号（前面已经有左括号）
-            if stack and stack[-1] == i-1:
+            # 检查是否是多余的左括号（前面已经有左括号且没有内容）
+            if stack and stack[-1] == i - 1:
                 # 连续左括号，删除多余的
                 del text_list[i]
                 issues.append("删除多余左括号 1 个")
-                continue  # 不增加i，因为删除了一个字符
+                continue
             stack.append(i)
         elif char == '）':
             if stack:
-                stack.pop()
+                # 检查括号内是否有内容
+                start_pos = stack[-1]
+                content = ''.join(text_list[start_pos + 1:i])
+                if not content.strip():  # 空括号
+                    # 删除这对空括号
+                    del text_list[start_pos:i + 1]
+                    issues.append("删除空括号 1 对")
+                    i = start_pos - 1  # 调整索引
+                    stack.pop()
+                else:
+                    stack.pop()
             else:
                 # 没有对应的左括号，需要在前面插入左括号
                 insert_positions.append(('left', i))
@@ -216,8 +226,15 @@ def analyze_and_fix(text):
 
     # 处理剩余的未匹配左括号
     for pos in stack:
-        # 在左括号后插入右括号
-        insert_positions.append(('right', pos))
+        # 检查括号内是否有内容
+        content = ''.join(text_list[pos + 1:])
+        if content.strip():  # 有内容
+            # 在字符串末尾插入右括号
+            insert_positions.append(('right', len(text_list) - 1))
+        else:
+            # 删除没有内容的左括号
+            del text_list[pos]
+            issues.append("删除多余左括号 1 个")
 
     # 按照位置逆序插入，避免影响索引
     insert_positions.sort(key=lambda x: x[1], reverse=True)
@@ -230,6 +247,7 @@ def analyze_and_fix(text):
             issues.append("补充缺失右括号 1 个")
 
     text = ''.join(text_list)
+
 
     # 嵌套括号检测与修复
     nested_pairs = 0
