@@ -190,7 +190,6 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 精确括号检测与修复
     stack = []
     valid_pairs = []
     unmatched_right = []
@@ -201,14 +200,13 @@ def analyze_and_fix(text):
         elif char == '）':
             if stack:
                 left_pos = stack.pop()
-                valid_pairs.append((left_pos, i))  # 成功匹配
+                valid_pairs.append((left_pos, i))
             else:
-                unmatched_right.append(i)  # 没有对应的左括号
+                unmatched_right.append(i)  # 多余右括号
 
-    # 剩下栈中的是无匹配的左括号
-    unmatched_left = stack
+    unmatched_left = stack  # 剩余未配对的左括号
 
-    # 标注问题
+    # 生成问题描述
     if unmatched_left or unmatched_right:
         details = []
         if unmatched_left:
@@ -217,10 +215,23 @@ def analyze_and_fix(text):
             details.append(f"多余{len(unmatched_right)}个右括号")
         issues.append("括号不匹配：" + "，".join(details))
 
-    # 构建新文本（删除多余括号）
+    # 删除多余括号
     text_list = list(text)
     to_delete = set(unmatched_left + unmatched_right)
-    new_text = ''.join([ch for idx, ch in enumerate(text_list) if idx not in to_delete])
+    cleaned = ''.join([ch for idx, ch in enumerate(text_list) if idx not in to_delete])
+
+    # 重新计数以判断是否需要补充括号
+    left_count = cleaned.count('（')
+    right_count = cleaned.count('）')
+
+    if left_count > right_count:
+        diff = left_count - right_count
+        cleaned += '）' * diff
+        issues.append(f"补充缺失右括号 {diff} 个")
+    elif right_count > left_count:
+        diff = right_count - left_count
+        cleaned = '（' * diff + cleaned
+        issues.append(f"补充缺失左括号 {diff} 个")
 
 
     # 嵌套括号检测（独立判断）
