@@ -190,25 +190,30 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 最保守的括号匹配逻辑：只补全缺失的对应括号，不删除、不修改任何现有括号
+    # 特殊情况处理：连续两个左括号开头的情况
+    if text.startswith('（（'):
+        text = text[1:]  # 删除第一个左括号
+        issues.append("删除多余左括号1个")
+
+    # 基础括号匹配补全（不改变其他任何结构）
     stack = []
     insert_positions = []
     text_list = list(text)
 
     for i, char in enumerate(text_list):
         if char == '（':
-            stack.append(i)  # 记录左括号位置
+            stack.append(i)
         elif char == '）':
             if stack:
-                stack.pop()  # 匹配到对应的左括号
+                stack.pop()
             else:
-                insert_positions.append(('left', i))  # 需要在前插入左括号
+                insert_positions.append(('left', i))
 
-    # 剩余的未匹配左括号需要在字符串末尾插入右括号
-    if stack:
-        insert_positions.append(('right', len(text_list)-1))
+    # 处理未闭合的左括号
+    for pos in stack:
+        insert_positions.append(('right', pos))
 
-    # 按照位置逆序插入，避免影响索引
+    # 按逆序插入
     insert_positions.sort(key=lambda x: x[1], reverse=True)
     for typ, pos in insert_positions:
         if typ == 'left':
@@ -219,7 +224,6 @@ def analyze_and_fix(text):
             issues.append("补充缺失右括号1个")
 
     text = ''.join(text_list)
-
 
     # 嵌套括号检测与修复
     nested_pairs = 0
