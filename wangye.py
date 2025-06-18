@@ -233,8 +233,9 @@ def analyze_and_fix(text):
         cleaned = '（' * diff + cleaned
         issues.append(f"补充缺失左括号 {diff} 个")
 
+    text = cleaned  # ✅ 关键：将修复后的内容替换 text，确保后续逻辑生效
 
-    # 嵌套括号检测（独立判断）
+    # 嵌套括号检测与修复（独立判断）
     nested_pairs = 0
     temp_stack = []
     for char in text:
