@@ -182,7 +182,6 @@ def analyze_and_fix(text):
     if pd.isna(text) or not str(text).strip():
         return text, []
 
-    # 初始处理
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
     original = text
@@ -191,47 +190,38 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 精确括号检测
+    # 精确括号检测与修复
     stack = []
-    extra_right_positions = []
-    extra_left_positions = []
+    valid_pairs = []
+    unmatched_right = []
 
-    # 扫描记录所有括号位置
     for i, char in enumerate(text):
         if char == '（':
-            stack.append(('left', i))  # 记录类型和位置
+            stack.append(i)
         elif char == '）':
-            if stack and stack[-1][0] == 'left':
-                stack.pop()  # 匹配成功
+            if stack:
+                left_pos = stack.pop()
+                valid_pairs.append((left_pos, i))  # 成功匹配
             else:
-                extra_right_positions.append(i)  # 多余右括号
+                unmatched_right.append(i)  # 没有对应的左括号
 
-    # 未匹配的左括号
-    extra_left_positions = [pos for (typ, pos) in stack if typ == 'left']
+    # 剩下栈中的是无匹配的左括号
+    unmatched_left = stack
 
-    # 生成问题描述
-    if extra_left_positions or extra_right_positions:
+    # 标注问题
+    if unmatched_left or unmatched_right:
         details = []
-        if extra_left_positions:
-            details.append(f"多余{len(extra_left_positions)}个左括号")
-        if extra_right_positions:
-            details.append(f"多余{len(extra_right_positions)}个右括号")
+        if unmatched_left:
+            details.append(f"多余{len(unmatched_left)}个左括号")
+        if unmatched_right:
+            details.append(f"多余{len(unmatched_right)}个右括号")
         issues.append("括号不匹配：" + "，".join(details))
 
-        # 精确修正
-        text_list = list(text)
+    # 构建新文本（删除多余括号）
+    text_list = list(text)
+    to_delete = set(unmatched_left + unmatched_right)
+    new_text = ''.join([ch for idx, ch in enumerate(text_list) if idx not in to_delete])
 
-        # 先删除多余的右括号（从后往前）
-        for pos in sorted(extra_right_positions, reverse=True):
-            if pos < len(text_list):
-                text_list.pop(pos)
-
-        # 再删除多余的左括号（从后往前）
-        for pos in sorted(extra_left_positions, reverse=True):
-            if pos < len(text_list):
-                text_list.pop(pos)
-
-        text = ''.join(text_list)
 
     # 嵌套括号检测（独立判断）
     nested_pairs = 0
