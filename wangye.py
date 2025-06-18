@@ -190,36 +190,40 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 括号配对修复
     stack = []
     insert_positions = []
     text_list = list(text)
 
-    pairs = []
-    unmatched_right = []
-
+    # 改进的括号匹配逻辑
     for i, char in enumerate(text_list):
         if char == '（':
-            stack.append(i)
+            stack.append(i)  # 存储左括号位置
         elif char == '）':
             if stack:
-                left = stack.pop()
-                pairs.append((left, i))
+                # 检查是否是最内层的右括号
+                if i + 1 < len(text_list) and text_list[i + 1] == '）':
+                    # 连续右括号，可能是嵌套结束，保留栈中位置
+                    pass
+                else:
+                    stack.pop()  # 正常匹配，弹出对应的左括号
             else:
-                unmatched_right.append(i)
+                # 没有对应的左括号，需要在前面插入左括号
+                insert_positions.append(('left', i))
 
-    for pos in unmatched_right:
-        insert_positions.append(('left', pos))
-
+    # 处理剩余的未匹配左括号
     for pos in stack:
-        insert_positions.append(('right', pos))
+        # 检查是否是最外层的左括号
+        if pos == 0 or text_list[pos - 1] != '）':
+            insert_positions.append(('right', pos))  # 在左括号后插入右括号
 
+    # 按照位置逆序插入，避免影响索引
     insert_positions.sort(key=lambda x: x[1], reverse=True)
     for typ, pos in insert_positions:
         if typ == 'left':
             text_list.insert(pos, '（')
             issues.append("补充缺失左括号 1 个")
         else:
+            # 在左括号后插入右括号
             text_list.insert(pos + 1, '）')
             issues.append("补充缺失右括号 1 个")
 
