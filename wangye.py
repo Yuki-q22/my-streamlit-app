@@ -190,15 +190,15 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 特殊情况处理：连续两个左括号开头的情况
+    # 特殊情况：开头连续左括号
     if text.startswith('（（'):
-        text = text[1:]  # 删除第一个左括号
+        text = text[1:]
         issues.append("删除多余左括号1个")
 
-    # 基础括号匹配补全（不改变其他任何结构）
-    stack = []
-    insert_positions = []
+    # 用栈来跟踪括号匹配
     text_list = list(text)
+    stack = []
+    unmatched_right = []
 
     for i, char in enumerate(text_list):
         if char == '（':
@@ -207,23 +207,21 @@ def analyze_and_fix(text):
             if stack:
                 stack.pop()
             else:
-                insert_positions.append(('left', i))
+                unmatched_right.append(i)
 
-    # 处理未闭合的左括号
-    for pos in stack:
-        insert_positions.append(('right', pos))
+    # 处理多余右括号：可选（当前你是补左括号）
+    for i in reversed(unmatched_right):
+        text_list.insert(i, '（')
+        issues.append("补充缺失左括号1个")
 
-    # 按逆序插入
-    insert_positions.sort(key=lambda x: x[1], reverse=True)
-    for typ, pos in insert_positions:
-        if typ == 'left':
-            text_list.insert(pos, '（')
-            issues.append("补充缺失左括号1个")
-        else:
-            text_list.insert(pos + 1, '）')
-            issues.append("补充缺失右括号1个")
+    # 处理缺失的右括号
+    for i in stack:
+        text_list.append('）')
+    if stack:
+        issues.append(f"补充缺失右括号{len(stack)}个")
 
     text = ''.join(text_list)
+
 
     # 嵌套括号检测与修复
     nested_pairs = 0
