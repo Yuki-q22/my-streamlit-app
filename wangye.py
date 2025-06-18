@@ -190,40 +190,25 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 特殊情况1：保留（刑科双学位）（（法学+刑事科学技术）...）的嵌套结构
-    if re.search(r'（刑科双学位）（（[^）]+）[^）]*）', text):
-        # 只需要确保括号匹配，不做其他修改
-        if text.count('（') > text.count('）'):
-            text += '）'
-            issues.append("补充缺失右括号1个")
-        return text, issues
-
-    # 特殊情况2：处理（中外合作办学）（民族班（荣昌校区）的情况
-    if re.search(r'（中外合作办学）（民族班（荣昌校区）', text):
-        # 确保补全最后的右括号
-        if text.count('（') > text.count('）'):
-            text = text.replace('（中外合作办学）（民族班（荣昌校区）',
-                                '（中外合作办学）（民族班（荣昌校区））')
-            issues.append("补充缺失右括号1个")
-        return text, issues
-
-    # 原有逻辑保持不变（处理其他所有情况）
+    # 最保守的括号匹配逻辑：只补全缺失的对应括号，不删除、不修改任何现有括号
     stack = []
     insert_positions = []
     text_list = list(text)
 
     for i, char in enumerate(text_list):
         if char == '（':
-            stack.append(i)
+            stack.append(i)  # 记录左括号位置
         elif char == '）':
             if stack:
-                stack.pop()
+                stack.pop()  # 匹配到对应的左括号
             else:
-                insert_positions.append(('left', i))
+                insert_positions.append(('left', i))  # 需要在前插入左括号
 
-    for pos in stack:
-        insert_positions.append(('right', pos))
+    # 剩余的未匹配左括号需要在字符串末尾插入右括号
+    if stack:
+        insert_positions.append(('right', len(text_list)-1))
 
+    # 按照位置逆序插入，避免影响索引
     insert_positions.sort(key=lambda x: x[1], reverse=True)
     for typ, pos in insert_positions:
         if typ == 'left':
@@ -234,6 +219,7 @@ def analyze_and_fix(text):
             issues.append("补充缺失右括号1个")
 
     text = ''.join(text_list)
+
 
     # 嵌套括号检测与修复
     nested_pairs = 0
