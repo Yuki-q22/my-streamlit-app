@@ -196,11 +196,11 @@ def analyze_and_fix(text):
         text = text[1:]
         issues.append("删除多余左括号1个")
 
+    # 先检查和修正括号配对
     text_list = list(text)
     stack = []
     unmatched_right = []
 
-    # 用栈跟踪括号
     for i, char in enumerate(text_list):
         if char == '（':
             stack.append(i)
@@ -210,7 +210,7 @@ def analyze_and_fix(text):
             else:
                 unmatched_right.append(i)
 
-    # 删除多余右括号（如末尾多余右括号）
+    # 删除多余右括号
     for i in reversed(unmatched_right):
         del text_list[i]
         issues.append("删除多余右括号1个")
@@ -222,38 +222,70 @@ def analyze_and_fix(text):
 
     text = ''.join(text_list)
 
-    # 修复嵌套括号 （（内容） → （内容）
+    # 嵌套修复
     text, nested_count = NESTED_PAREN_PATTERN.subn(r'（\1）', text)
     if nested_count > 0:
         issues.append(f"修复嵌套括号{nested_count}处")
 
-    # 拆分未括起的内容与已有括号混合部分
-    # 比如：中外合作办学（国家专项） → （中外合作办学）（国家专项）
-    def split_mixed(text):
-        result = ''
-        while text:
-            m = re.match(r'^（.*?）', text)
-            if m:
-                # 已有完整括号部分
-                result += m.group(0)
-                text = text[m.end():]
+    # 按块切分：不随意加括号，先分离已有的括号块
+    parts = re.split(r'(（.*?）)', text)
+    rebuilt = ''
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith('（') and part.endswith('）'):
+            rebuilt += part
+        else:
+            # 仅处理裸字段：全是汉字、字母、数字，不含任何括号和标点才补括号
+            if re.match(r'^[\u4e00-\u9fa5a-zA-Z0-9]+$', part.strip()):
+                rebuilt += f'（{part.strip()}）'
+                issues.append(f"补充括号包裹内容：'{part.strip()}'")
             else:
-                # 没有括号的前缀，取到下一个括号或结尾
-                next_paren = re.search(r'（', text)
-                if next_paren:
-                    prefix = text[:next_paren.start()].strip()
-                    if prefix:
-                        result += f'（{prefix}）'
-                        issues.append(f"补充括号包裹内容：'{prefix}'")
-                    text = text[next_paren.start():]
-                else:
-                    # 剩余部分没有括号
-                    prefix = text.strip()
-                    if prefix:
-                        result += f'（{prefix}）'
-                        issues.append(f"补充括号包裹内容：'{prefix}'")
-                    break
-        return result
+                rebuilt += part  # 保留原样（避免误判）
+
+    text = rebuilt
+
+    # 删除空或纯标点括号
+    def clean_empty_paren(m):
+        content = m.group(1).strip('，、,;；:：。！？.!? ')
+        if not content:
+            issues.append("删除空括号或仅含标点括号")
+            return ''
+        return f'（{content}）'
+
+    text = re.sub(r'（(.*?)）', clean_empty_paren, text)
+
+    # 括号内去重
+    seen = set()
+
+    def dedup(m):
+        c = m.group(1)
+        if c in seen:
+            issues.append(f"重复括号内容：'{c}'")
+            return ''
+        seen.add(c)
+        return f'（{c}）'
+
+    text = re.sub(r'（(.*?)）', dedup, text)
+
+    # 多余标点简化
+    text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
+
+    # 相似重复检查
+    contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
+    for i in range(len(contents)):
+        for j in range(i + 1, len(contents)):
+            if similar(contents[i], contents[j]) >= 0.8:
+                issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
+
+    # 错别字修正
+    for typo, corr in TYPO_DICT.items():
+        if typo in text:
+            text = text.replace(typo, corr)
+            issues.append(f"错别字：'{typo}'→'{corr}'")
+
+    return text, issues
+
 
     text = split_mixed(text)
 
