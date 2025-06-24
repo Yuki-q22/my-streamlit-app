@@ -185,18 +185,12 @@ def analyze_and_fix(text):
 
     text = normalize_brackets(text)
     text = clean_outer_punctuation(text)
-    original = text
     issues = []
 
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 特殊情况：连续左括号
-    if text.startswith('（（'):
-        text = text[1:]
-        issues.append("删除多余左括号1个")
-
-    # 先检查和修正括号配对
+    # ========== 括号成对修正 ==========
     text_list = list(text)
     stack = []
     unmatched_right = []
@@ -210,42 +204,41 @@ def analyze_and_fix(text):
             else:
                 unmatched_right.append(i)
 
-    # 删除多余右括号
     for i in reversed(unmatched_right):
         del text_list[i]
         issues.append("删除多余右括号1个")
 
-    # 补充缺失右括号
     if stack:
         text_list.extend(['）'] * len(stack))
         issues.append(f"补充缺失右括号{len(stack)}个")
 
     text = ''.join(text_list)
 
-    # 嵌套修复
+    # 嵌套括号修正
     text, nested_count = NESTED_PAREN_PATTERN.subn(r'（\1）', text)
     if nested_count > 0:
         issues.append(f"修复嵌套括号{nested_count}处")
 
-    # 按块切分：不随意加括号，先分离已有的括号块
+    # ========== 裸字段补括号（谨慎） ==========
     parts = re.split(r'(（.*?）)', text)
     rebuilt = ''
     for part in parts:
-        if not part:
+        if not part.strip():
             continue
         if part.startswith('（') and part.endswith('）'):
             rebuilt += part
         else:
-            # 仅处理裸字段：全是汉字、字母、数字，不含任何括号和标点才补括号
-            if re.match(r'^[\u4e00-\u9fa5a-zA-Z0-9]+$', part.strip()):
-                rebuilt += f'（{part.strip()}）'
-                issues.append(f"补充括号包裹内容：'{part.strip()}'")
+            # 仅全为字母数字汉字（且去除空格后）才补括号
+            clean_part = part.strip()
+            if clean_part and re.fullmatch(r'[\u4e00-\u9fa5a-zA-Z0-9]+', clean_part):
+                rebuilt += f'（{clean_part}）'
+                issues.append(f"补充括号包裹内容：'{clean_part}'")
             else:
-                rebuilt += part  # 保留原样（避免误判）
+                rebuilt += clean_part
 
     text = rebuilt
 
-    # 删除空或纯标点括号
+    # ========== 删除空括号或纯标点括号 ==========
     def clean_empty_paren(m):
         content = m.group(1).strip('，、,;；:：。！？.!? ')
         if not content:
@@ -255,9 +248,8 @@ def analyze_and_fix(text):
 
     text = re.sub(r'（(.*?)）', clean_empty_paren, text)
 
-    # 括号内去重
+    # ========== 去重 ==========
     seen = set()
-
     def dedup(m):
         c = m.group(1)
         if c in seen:
@@ -268,23 +260,17 @@ def analyze_and_fix(text):
 
     text = re.sub(r'（(.*?)）', dedup, text)
 
-    # 多余标点简化
+    # ========== 多余标点简化 ==========
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
 
-    # 相似重复检查
-    contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
-    for i in range(len(contents)):
-        for j in range(i + 1, len(contents)):
-            if similar(contents[i], contents[j]) >= 0.8:
-                issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
-
-    # 错别字修正
+    # ========== 错别字修正 ==========
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
+
 
 
     text = split_mixed(text)
