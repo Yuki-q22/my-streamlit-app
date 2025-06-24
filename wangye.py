@@ -214,31 +214,12 @@ def analyze_and_fix(text):
 
     text = ''.join(text_list)
 
-    # 嵌套括号修正
+    # 嵌套修正
     text, nested_count = NESTED_PAREN_PATTERN.subn(r'（\1）', text)
     if nested_count > 0:
         issues.append(f"修复嵌套括号{nested_count}处")
 
-    # ========== 裸字段补括号（谨慎） ==========
-    parts = re.split(r'(（.*?）)', text)
-    rebuilt = ''
-    for part in parts:
-        if not part.strip():
-            continue
-        if part.startswith('（') and part.endswith('）'):
-            rebuilt += part
-        else:
-            # 仅全为字母数字汉字（且去除空格后）才补括号
-            clean_part = part.strip()
-            if clean_part and re.fullmatch(r'[\u4e00-\u9fa5a-zA-Z0-9]+', clean_part):
-                rebuilt += f'（{clean_part}）'
-                issues.append(f"补充括号包裹内容：'{clean_part}'")
-            else:
-                rebuilt += clean_part
-
-    text = rebuilt
-
-    # ========== 删除空括号或纯标点括号 ==========
+    # ========== 清理空括号或纯标点括号 ==========
     def clean_empty_paren(m):
         content = m.group(1).strip('，、,;；:：。！？.!? ')
         if not content:
@@ -271,50 +252,6 @@ def analyze_and_fix(text):
 
     return text, issues
 
-
-
-    text = split_mixed(text)
-
-    # 删除空或仅含标点的括号
-    def clean_empty_paren(m):
-        content = m.group(1).strip('，、,;；:：。！？.!? ')
-        if not content:
-            issues.append("删除空括号或仅含标点括号")
-            return ''
-        return f'（{content}）'
-
-    text = re.sub(r'（(.*?)）', clean_empty_paren, text)
-
-    # 括号内去重
-    seen = set()
-
-    def dedup(m):
-        c = m.group(1)
-        if c in seen:
-            issues.append(f"重复括号内容：'{c}'")
-            return ''
-        seen.add(c)
-        return f'（{c}）'
-
-    text = re.sub(r'（(.*?)）', dedup, text)
-
-    # 多余标点简化
-    text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
-
-    # 相似重复检查
-    contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
-    for i in range(len(contents)):
-        for j in range(i + 1, len(contents)):
-            if similar(contents[i], contents[j]) >= 0.8:
-                issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
-
-    # 错别字修正
-    for typo, corr in TYPO_DICT.items():
-        if typo in text:
-            text = text.replace(typo, corr)
-            issues.append(f"错别字：'{typo}'→'{corr}'")
-
-    return text, issues
 
 
 def process_chunk(chunk):
