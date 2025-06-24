@@ -1001,7 +1001,7 @@ with tab3:
                 new_filename = f"{base_name}校验结果.xlsx"
 
                 # 构造下载链接
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">点击下载处理结果</a>'
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{new_filename}">点击下载处理结果</a>'
 
                 st.markdown(href, unsafe_allow_html=True)
 
