@@ -650,14 +650,22 @@ def process_segmentation_file(file_path):
                     pass
 
         # 校验累计人数
-        if prev_total is not None and curr_num is not None and curr_total is not None:
-            expected_total = prev_total + curr_num
-            if expected_total == curr_total:
-                if ws[f"E{row}"].value != "补断点":
-                    ws[f"E{row}"] = "√"
-            else:
-                if ws[f"E{row}"].value != "补断点":
-                    ws[f"E{row}"] = f"× 应为{expected_total}"
+        if row == 8:
+            # 第8行直接标记正确（假设第8行累计人数正确）
+            if ws[f"E{row}"].value != "补断点":
+                ws[f"E{row}"] = "√"
+            correct_total = curr_total
+        else:
+            if curr_num is not None and curr_total is not None and correct_total is not None:
+                expected_total = correct_total + curr_num
+                if expected_total == curr_total:
+                    if ws[f"E{row}"].value != "补断点":
+                        ws[f"E{row}"] = "√"
+                    correct_total = curr_total  # 本行累计正确，用它更新基准
+                else:
+                    if ws[f"E{row}"].value != "补断点":
+                        ws[f"E{row}"] = f"× 应为{expected_total}"
+                    correct_total = expected_total
 
         # 校验分数差
         try:
