@@ -108,6 +108,7 @@ TYPO_DICT = {
     "色盲色弱申报": "色盲色弱慎报",
     "数学与应用数笑": "数学与应用数学",
     "法学十": "法学+",
+    "浣海校区": "滨海校区",
     "中溴": "中澳"
 }
 
@@ -190,16 +191,16 @@ def analyze_and_fix(text):
     if text in CUSTOM_WHITELIST:
         return text, []
 
-    # 特殊情况：开头连续左括号
+    # 特殊情况：连续左括号
     if text.startswith('（（'):
         text = text[1:]
         issues.append("删除多余左括号1个")
 
-    # 用栈来跟踪括号匹配
     text_list = list(text)
     stack = []
     unmatched_right = []
 
+    # 用栈跟踪括号
     for i, char in enumerate(text_list):
         if char == '（':
             stack.append(i)
@@ -209,85 +210,57 @@ def analyze_and_fix(text):
             else:
                 unmatched_right.append(i)
 
-    # 处理多余右括号：可选（当前你是补左括号）
+    # 删除多余右括号（如末尾多余右括号）
     for i in reversed(unmatched_right):
-        text_list.insert(i, '（')
-        issues.append("补充缺失左括号1个")
+        del text_list[i]
+        issues.append("删除多余右括号1个")
 
-    # 处理缺失的右括号
-    for i in stack:
-        text_list.append('）')
+    # 补充缺失右括号
     if stack:
+        text_list.extend(['）'] * len(stack))
         issues.append(f"补充缺失右括号{len(stack)}个")
 
     text = ''.join(text_list)
 
+    # 修复括号嵌套错误 （（内容） → （内容）
+    text, nested_count = NESTED_PAREN_PATTERN.subn(r'（\1）', text)
+    if nested_count > 0:
+        issues.append(f"修复嵌套括号{nested_count}处")
 
-    # 嵌套括号检测与修复
-    nested_pairs = 0
-    temp_stack = []
-    for char in text:
-        if char == '（':
-            temp_stack.append(char)
-        elif char == '）':
-            if temp_stack:
-                temp_stack.pop()
+    # 括号内空或只有标点，删除该括号
+    def clean_empty_paren(m):
+        content = m.group(1).strip('，、,;；:：。！？.!? ')
+        if not content:
+            issues.append("删除空括号或仅含标点括号")
+            return ''
+        return f'（{content}）'
 
-    if len(temp_stack) > 1:  # 有嵌套
-        issues.append("存在嵌套括号")
-        text = NESTED_PAREN_PATTERN.sub(r'（\1）', text)
+    text = re.sub(r'（(.*?)）', clean_empty_paren, text)
 
-    # 4. 括号内内容处理：去除首尾多余标点，并记录问题
-    def fix_paren(m):
-        content = m.group(1)
-        orig_content = content
-        # 定义允许的标点清单，这里加上中文半角冒号等
-        puncts = '，、,;；:：。！？.!?'
-
-        # 去除首尾多余标点
-        start_strip = 0
-        end_strip = len(content)
-
-        while start_strip < end_strip and content[start_strip] in puncts:
-            start_strip += 1
-        while end_strip > start_strip and content[end_strip - 1] in puncts:
-            end_strip -= 1
-        new_content = content[start_strip:end_strip]
-
-        # 记录首尾多余标点情况
-        if start_strip > 0:
-            issues.append(f"内容多标点/内容不完整：'{orig_content}'")
-        if end_strip < len(content):
-            issues.append(f"内容多标点/内容不完整：'{orig_content}'")
-
-        return f'（{new_content}）'
-
-    text = re.sub(r'（(.*?)）', fix_paren, text)
-
-    # 5. 括号内内容去重，重复时记录问题
+    # 括号内内容去重
     seen = set()
 
     def dedup(m):
         c = m.group(1)
         if c in seen:
             issues.append(f"重复括号内容：'{c}'")
-            return ''  # 去重，去掉重复括号
+            return ''
         seen.add(c)
         return f'（{c}）'
 
     text = re.sub(r'（(.*?)）', dedup, text)
 
-    # 6. 多余标点简化
+    # 多余标点简化
     text = REGEX_PATTERNS['excess_punct'].sub(lambda m: m.group(0)[0], text)
 
-    # 7. 相似内容检测，记录相似重复
+    # 相似重复检查
     contents = list(dict.fromkeys(re.findall(r'（(.*?)）', original)))
     for i in range(len(contents)):
         for j in range(i + 1, len(contents)):
             if similar(contents[i], contents[j]) >= 0.8:
                 issues.append(f"相似重复：'{contents[i]}' 与 '{contents[j]}'")
 
-    # 8. 规则字典校正
+    # 错别字修正
     for typo, corr in TYPO_DICT.items():
         if typo in text:
             text = text.replace(typo, corr)
