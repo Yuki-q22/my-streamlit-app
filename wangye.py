@@ -991,8 +991,18 @@ with tab3:
                 # 提供下载链接
                 with open(output_path, "rb") as f:
                     bytes_data = f.read()
+
                 b64 = base64.b64encode(bytes_data).decode()
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="一分一段处理结果.xlsx">点击下载处理结果</a>'
+
+                # 从 output_path 提取原文件名（去掉扩展名）
+                base_name = os.path.splitext(os.path.basename(output_path))[0]
+
+                # 拼接新文件名
+                new_filename = f"{base_name}校验结果.xlsx"
+
+                # 构造下载链接
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{new_filename}">点击下载处理结果</a>'
+
                 st.markdown(href, unsafe_allow_html=True)
 
                 # 清理临时文件
