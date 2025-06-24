@@ -971,7 +971,7 @@ with tab3:
         if st.button("开始数据处理", key="process_segmentation"):
             try:
                 # 保存上传的文件到临时位置
-                temp_file = "temp_segmentation.xlsx"
+                temp_file = "一分一段.xlsx"
                 with open(temp_file, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
@@ -998,7 +998,7 @@ with tab3:
                 base_name = os.path.splitext(os.path.basename(output_path))[0]
 
                 # 拼接新文件名
-                new_filename = f"{base_name}校验结果.xlsx"
+                new_filename = f"{base_name}_校验结果.xlsx"
 
                 # 构造下载链接
                 href = f'<a href="data:application/octet-stream;base64,{b64}" download="{new_filename}">点击下载处理结果</a>'
