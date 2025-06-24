@@ -222,12 +222,42 @@ def analyze_and_fix(text):
 
     text = ''.join(text_list)
 
-    # 修复括号嵌套错误 （（内容） → （内容）
+    # 修复嵌套括号 （（内容） → （内容）
     text, nested_count = NESTED_PAREN_PATTERN.subn(r'（\1）', text)
     if nested_count > 0:
         issues.append(f"修复嵌套括号{nested_count}处")
 
-    # 括号内空或只有标点，删除该括号
+    # 拆分未括起的内容与已有括号混合部分
+    # 比如：中外合作办学（国家专项） → （中外合作办学）（国家专项）
+    def split_mixed(text):
+        result = ''
+        while text:
+            m = re.match(r'^（.*?）', text)
+            if m:
+                # 已有完整括号部分
+                result += m.group(0)
+                text = text[m.end():]
+            else:
+                # 没有括号的前缀，取到下一个括号或结尾
+                next_paren = re.search(r'（', text)
+                if next_paren:
+                    prefix = text[:next_paren.start()].strip()
+                    if prefix:
+                        result += f'（{prefix}）'
+                        issues.append(f"补充括号包裹内容：'{prefix}'")
+                    text = text[next_paren.start():]
+                else:
+                    # 剩余部分没有括号
+                    prefix = text.strip()
+                    if prefix:
+                        result += f'（{prefix}）'
+                        issues.append(f"补充括号包裹内容：'{prefix}'")
+                    break
+        return result
+
+    text = split_mixed(text)
+
+    # 删除空或仅含标点的括号
     def clean_empty_paren(m):
         content = m.group(1).strip('，、,;；:：。！？.!? ')
         if not content:
@@ -237,7 +267,7 @@ def analyze_and_fix(text):
 
     text = re.sub(r'（(.*?)）', clean_empty_paren, text)
 
-    # 括号内内容去重
+    # 括号内去重
     seen = set()
 
     def dedup(m):
