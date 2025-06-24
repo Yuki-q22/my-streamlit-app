@@ -889,7 +889,7 @@ with tab1:
                 with open(output_path, "rb") as f:
                     bytes_data = f.read()
                 b64 = base64.b64encode(bytes_data).decode()
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}_院校分提取.xlsx">点击下载处理结果</a>'
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="院校分提取结果.xlsx">点击下载处理结果</a>'
                 st.markdown(href, unsafe_allow_html=True)
 
                 # 清理临时文件
@@ -942,7 +942,7 @@ with tab2:
                 with open(output_path, "rb") as f:
                     bytes_data = f.read()
                 b64 = base64.b64encode(bytes_data).decode()
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}_学业桥数据处理结果.xlsx">点击下载处理结果</a>'
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="学业桥数据处理结果.xlsx">点击下载处理结果</a>'
                 st.markdown(href, unsafe_allow_html=True)
 
                 # 清理临时文件
@@ -992,7 +992,7 @@ with tab3:
                 with open(output_path, "rb") as f:
                     bytes_data = f.read()
                 b64 = base64.b64encode(bytes_data).decode()
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}_一分一段处理结果.xlsx">点击下载处理结果</a>'
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="一分一段处理结果.xlsx">点击下载处理结果</a>'
                 st.markdown(href, unsafe_allow_html=True)
 
                 # 清理临时文件
