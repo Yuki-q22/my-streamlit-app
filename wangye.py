@@ -387,9 +387,9 @@ def process_score_file(file_path):
         def get_group_total(row, column_name):
             key = tuple(row[col] for col in group_with_code)
             if column_name == '招生人数（选填）':
-                return code_groups.get(key, '')
-            elif column_name == '录取人数（选填）':
                 return enroll_groups.get(key, '')
+            elif column_name == '录取人数（选填）':
+                return code_groups.get(key, '')
             return ''
 
         result['招生人数（选填）'] = result.apply(lambda row: get_group_total(row, '招生人数（选填）'), axis=1)
