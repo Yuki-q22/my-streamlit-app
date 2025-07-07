@@ -1183,7 +1183,7 @@ with tab5:
                     for path in image_paths:
                         st.image(path, width=150)
 
-                pdf_path = os.path.join(output_folder, "图片合集.pdf")
+                pdf_path = os.path.join(output_folder, "就业质量报告.pdf")
                 if images_to_pdf(image_paths, pdf_path):
                     with open(pdf_path, "rb") as f:
                         st.download_button("下载PDF", f, file_name="图片合集.pdf", mime="application/pdf")
