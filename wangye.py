@@ -11,7 +11,11 @@ from openpyxl.styles import numbers
 import base64
 import sys
 from io import BytesIO
-
+import asyncio
+import tempfile
+from urllib.parse import urljoin, urlparse
+from playwright.async_api import async_playwright
+from PIL import Image
 
 # ============================
 # 初始化设置
@@ -645,6 +649,8 @@ def process_segmentation_file(file_path):
     return output_path
 
 
+
+
 # ============================
 # 专业组代码匹配
 # ============================
@@ -779,6 +785,56 @@ def process_data(dfA, dfB):
 
     return dfA
 
+ # ========== 就业质量报告图片提取 ==========
+async def fetch_images(url, output_folder):
+    os.makedirs(output_folder, exist_ok=True)
+    image_paths = []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+
+        try:
+            await page.goto(url, wait_until='networkidle')
+        except Exception as e:
+            await browser.close()
+            raise Exception(f"页面加载失败: {e}")
+
+        img_elements = await page.query_selector_all("img")
+        for idx, img in enumerate(img_elements, start=1):
+            src = await img.get_attribute("src")
+            if not src:
+                continue
+            full_url = urljoin(url, src)
+            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
+            filename = f"img_{idx:03d}{ext}"
+            save_path = os.path.join(output_folder, filename)
+
+            try:
+                img_data = await page.request.get(full_url)
+                with open(save_path, "wb") as f:
+                    f.write(await img_data.body())
+                image_paths.append(save_path)
+            except:
+                continue
+
+        await browser.close()
+    return image_paths
+
+def images_to_pdf(image_paths, pdf_path):
+    image_list = []
+    for path in sorted(image_paths):
+        try:
+            img = Image.open(path).convert("RGB")
+            image_list.append(img)
+        except:
+            continue
+
+    if image_list:
+        image_list[0].save(pdf_path, save_all=True, append_images=image_list[1:])
+        return True
+    return False
+
 
 
 # ============================
@@ -847,7 +903,7 @@ with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）", "就业质量报告图片提取"])
 
 # ====================== 院校分提取 ======================
 with tab1:
@@ -1074,6 +1130,43 @@ with tab4:
                 st.error(f"处理错误：{e}")
     else:
         st.info("请先上传两个Excel文件")
+
+# ====================== tab5：网页图片提取PDF ======================
+with tab5:
+    st.header("🖼️ 网页图片提取并合成 PDF")
+
+    url = st.text_input("请输入网页链接", placeholder="例如：https://example.com/page.html", key="web_image_url")
+    output_folder = tempfile.mkdtemp()
+
+    if st.button("📥 提取网页图片", key="extract_images"):
+        if url:
+            with st.spinner("正在提取图片..."):
+                try:
+                    image_paths = asyncio.run(fetch_images(url, output_folder))
+                except Exception as e:
+                    st.error(f"网页加载失败：{e}")
+                    image_paths = []
+
+            if image_paths:
+                st.success(f"共提取 {len(image_paths)} 张图片")
+                for img_path in image_paths:
+                    st.image(img_path, use_column_width=True)
+
+                # 合成 PDF
+                pdf_path = os.path.join(output_folder, "提取图片合成.pdf")
+                if images_to_pdf(image_paths, pdf_path):
+                    with open(pdf_path, "rb") as f:
+                        bytes_data = f.read()
+                    b64 = base64.b64encode(bytes_data).decode()
+                    href = f'<a href="data:application/pdf;base64,{b64}" download="网页图片合集.pdf">📄 点击下载合成PDF</a>'
+                    st.markdown(href, unsafe_allow_html=True)
+                    st.success("PDF生成成功！")
+                else:
+                    st.warning("未成功生成PDF，请检查图片内容")
+            else:
+                st.warning("未提取到任何图片")
+        else:
+            st.error("请先输入网页链接")
 
 
 # 页脚
