@@ -1179,12 +1179,9 @@ with tab5:
             if image_paths:
                 st.success(f"提取到 {len(image_paths)} 张图片")
 
-                show_preview = st.checkbox("显示图片预览", value=False)
-
-                if show_preview:
-                    with st.expander(f"点击查看 {len(image_paths)} 张图片预览"):
-                        for path in image_paths:
-                            st.image(path, width=150)
+                with st.expander(f"点击查看 {len(image_paths)} 张图片预览", expanded=False):
+                    for path in image_paths:
+                        st.image(path, width=150)
 
                 pdf_path = os.path.join(output_folder, "图片合集.pdf")
                 if images_to_pdf(image_paths, pdf_path):
@@ -1192,6 +1189,7 @@ with tab5:
                         st.download_button("下载PDF", f, file_name="图片合集.pdf", mime="application/pdf")
                 else:
                     st.warning("PDF合成失败")
+
 
             else:
                 st.warning("未提取到任何图片")
