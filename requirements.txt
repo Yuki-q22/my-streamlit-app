@@ -4,3 +4,5 @@ openpyxl
 jieba
 playwright
 pillow
+requests
+beautifulsoup4
