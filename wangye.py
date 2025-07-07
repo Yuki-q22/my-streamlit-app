@@ -11,11 +11,11 @@ from openpyxl.styles import numbers
 import base64
 import sys
 from io import BytesIO
-import asyncio
-import tempfile
+import requests
 from urllib.parse import urljoin, urlparse
-from playwright.async_api import async_playwright
+from bs4 import BeautifulSoup
 from PIL import Image
+from playwright.async_api import async_playwright
 
 # ============================
 # 初始化设置
@@ -786,41 +786,65 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
-async def fetch_images(url, output_folder):
+# 🅰️ 静态模式：requests + bs4
+def fetch_images_static(url, output_folder):
+    os.makedirs(output_folder, exist_ok=True)
+    image_paths = []
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        img_tags = soup.find_all("img")
+        for idx, img in enumerate(img_tags, 1):
+            src = img.get("src")
+            if not src:
+                continue
+            img_url = urljoin(url, src)
+            ext = os.path.splitext(urlparse(img_url).path)[1] or '.jpg'
+            filename = f"img_{idx:03d}{ext}"
+            save_path = os.path.join(output_folder, filename)
+            try:
+                img_data = requests.get(img_url, timeout=10).content
+                with open(save_path, "wb") as f:
+                    f.write(img_data)
+                image_paths.append(save_path)
+            except:
+                continue
+    except Exception as e:
+        raise Exception(f"静态模式加载失败: {e}")
+    return image_paths
+
+# 🅱️ 动态模式：playwright 抓取
+async def fetch_images_dynamic(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
-
         try:
-            await page.goto(url, wait_until='networkidle')
+            await page.goto(url, wait_until="networkidle")
+            img_elements = await page.query_selector_all("img")
+            for idx, img in enumerate(img_elements, 1):
+                src = await img.get_attribute("src")
+                if not src:
+                    continue
+                full_url = urljoin(url, src)
+                ext = os.path.splitext(urlparse(full_url).path)[1] or '.jpg'
+                filename = f"img_{idx:03d}{ext}"
+                save_path = os.path.join(output_folder, filename)
+                try:
+                    img_data = await page.request.get(full_url)
+                    with open(save_path, "wb") as f:
+                        f.write(await img_data.body())
+                    image_paths.append(save_path)
+                except:
+                    continue
         except Exception as e:
-            await browser.close()
-            raise Exception(f"页面加载失败: {e}")
-
-        img_elements = await page.query_selector_all("img")
-        for idx, img in enumerate(img_elements, start=1):
-            src = await img.get_attribute("src")
-            if not src:
-                continue
-            full_url = urljoin(url, src)
-            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-            filename = f"img_{idx:03d}{ext}"
-            save_path = os.path.join(output_folder, filename)
-
-            try:
-                img_data = await page.request.get(full_url)
-                with open(save_path, "wb") as f:
-                    f.write(await img_data.body())
-                image_paths.append(save_path)
-            except:
-                continue
-
+            raise Exception(f"动态模式加载失败: {e}")
         await browser.close()
     return image_paths
 
+# 图片转 PDF
 def images_to_pdf(image_paths, pdf_path):
     image_list = []
     for path in sorted(image_paths):
@@ -829,7 +853,6 @@ def images_to_pdf(image_paths, pdf_path):
             image_list.append(img)
         except:
             continue
-
     if image_list:
         image_list[0].save(pdf_path, save_all=True, append_images=image_list[1:])
         return True
@@ -1133,40 +1156,46 @@ with tab4:
 
 # ====================== tab5：网页图片提取PDF ======================
 with tab5:
-    st.header("🖼️ 网页图片提取并合成 PDF")
+    st.header("就业质量报告图片提取与PDF合成")
 
-    url = st.text_input("请输入网页链接", placeholder="例如：https://example.com/page.html", key="web_image_url")
+    url = st.text_input("请输入网页链接", placeholder="例如：https://example.com/page.html")
+    mode = st.radio("选择抓取模式", ["静态模式（推荐线上）", "动态模式（仅本地运行）"])
+
     output_folder = tempfile.mkdtemp()
 
-    if st.button("📥 提取网页图片", key="extract_images"):
-        if url:
-            with st.spinner("正在提取图片..."):
+    if st.button("开始提取图片"):
+        if not url:
+            st.warning("请输入有效的网页链接")
+        else:
+            with st.spinner("正在抓取图片..."):
+                image_paths = []
                 try:
-                    image_paths = asyncio.run(fetch_images(url, output_folder))
+                    if mode == "静态模式（推荐线上）":
+                        image_paths = fetch_images_static(url, output_folder)
+                    else:
+                        image_paths = asyncio.run(fetch_images_dynamic(url, output_folder))
                 except Exception as e:
-                    st.error(f"网页加载失败：{e}")
+                    st.error(f"抓取失败：{e}")
                     image_paths = []
 
             if image_paths:
-                st.success(f"共提取 {len(image_paths)} 张图片")
+                st.success(f"成功提取 {len(image_paths)} 张图片")
                 for img_path in image_paths:
                     st.image(img_path, use_column_width=True)
 
-                # 合成 PDF
-                pdf_path = os.path.join(output_folder, "提取图片合成.pdf")
+                pdf_path = os.path.join(output_folder, "就业质量报告图片合集.pdf")
                 if images_to_pdf(image_paths, pdf_path):
                     with open(pdf_path, "rb") as f:
-                        bytes_data = f.read()
-                    b64 = base64.b64encode(bytes_data).decode()
-                    href = f'<a href="data:application/pdf;base64,{b64}" download="网页图片合集.pdf">📄 点击下载合成PDF</a>'
-                    st.markdown(href, unsafe_allow_html=True)
-                    st.success("PDF生成成功！")
+                        st.download_button(
+                            label="下载合成PDF",
+                            data=f,
+                            file_name="就业质量报告图片合集.pdf",
+                            mime="application/pdf"
+                        )
                 else:
-                    st.warning("未成功生成PDF，请检查图片内容")
+                    st.warning("PDF合成失败，请检查图片文件")
             else:
                 st.warning("未提取到任何图片")
-        else:
-            st.error("请先输入网页链接")
 
 
 # 页脚
