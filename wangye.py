@@ -13,11 +13,10 @@ import sys
 from io import BytesIO
 import requests
 import tempfile
-import asyncio
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
-from playwright.async_api import async_playwright
+
 
 # ============================
 # 初始化设置
@@ -793,6 +792,7 @@ def fetch_images_static(url, output_folder):
     image_paths = []
     try:
         resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
         imgs = soup.find_all("img")
         for idx, img in enumerate(imgs, 1):
@@ -808,39 +808,10 @@ def fetch_images_static(url, output_folder):
                 with open(path, "wb") as f:
                     f.write(img_data)
                 image_paths.append(path)
-            except:
+            except Exception:
                 continue
     except Exception as e:
         raise Exception(f"静态模式加载失败: {e}")
-    return image_paths
-
-async def fetch_images_dynamic(url, output_folder):
-    os.makedirs(output_folder, exist_ok=True)
-    image_paths = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        try:
-            await page.goto(url, wait_until="networkidle")
-            imgs = await page.query_selector_all("img")
-            for idx, img in enumerate(imgs, 1):
-                src = await img.get_attribute("src")
-                if not src:
-                    continue
-                full_url = urljoin(url, src)
-                ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-                filename = f"img_{idx:03d}{ext}"
-                path = os.path.join(output_folder, filename)
-                try:
-                    img_resp = await page.request.get(full_url)
-                    with open(path, "wb") as f:
-                        f.write(await img_resp.body())
-                    image_paths.append(path)
-                except:
-                    continue
-        except Exception as e:
-            raise Exception(f"动态模式加载失败: {e}")
-        await browser.close()
     return image_paths
 
 def images_to_pdf(image_paths, pdf_path):
@@ -849,7 +820,7 @@ def images_to_pdf(image_paths, pdf_path):
         try:
             img = Image.open(path).convert("RGB")
             images.append(img)
-        except:
+        except Exception:
             continue
     if images:
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
@@ -1156,43 +1127,36 @@ with tab4:
 with tab5:
     st.header("就业质量报告图片提取")
 
-    url = st.text_input("请输入网页链接", placeholder="例如：https://example.com/page.html")
-    mode = st.radio("选择抓取模式", ["静态模式", "动态模式"])
-
-    output_folder = tempfile.mkdtemp()
+    url = st.text_input("请输入就业质量报告网页链接", placeholder="例如：https://www.example.com/report.html")
 
     if st.button("开始提取图片"):
         if not url:
             st.warning("请输入有效的网页链接")
         else:
+            output_folder = tempfile.mkdtemp()
             with st.spinner("正在抓取图片..."):
-                image_paths = []
                 try:
-                    if mode == "静态模式":
-                        image_paths = fetch_images_static(url, output_folder)
-                    else:
-                        image_paths = asyncio.run(fetch_images_dynamic(url, output_folder))
+                    image_paths = fetch_images_static(url, output_folder)
                 except Exception as e:
-                    st.error(f"抓取失败：{e}")
+                    st.error(f"抓取失败: {e}")
                     image_paths = []
 
             if image_paths:
-                st.success(f"提取到 {len(image_paths)} 张图片")
+                st.success(f"成功提取到 {len(image_paths)} 张图片")
 
                 with st.expander(f"点击查看 {len(image_paths)} 张图片预览", expanded=False):
-                    for path in image_paths:
-                        st.image(path, width=150)
+                    cols = st.columns(5)
+                    for i, path in enumerate(image_paths):
+                        cols[i % 5].image(path, width=120)
 
-                pdf_path = os.path.join(output_folder, "就业质量报告.pdf")
+                pdf_path = os.path.join(output_folder, "图片合集.pdf")
                 if images_to_pdf(image_paths, pdf_path):
                     with open(pdf_path, "rb") as f:
-                        st.download_button("下载PDF", f, file_name="图片合集.pdf", mime="application/pdf")
+                        st.download_button("下载合成PDF", f, file_name="就业质量报告.pdf", mime="application/pdf")
                 else:
                     st.warning("PDF合成失败")
-
-
             else:
-                st.warning("未提取到任何图片")
+                st.warning("未抓取到任何图片")
 
 
 # 页脚
