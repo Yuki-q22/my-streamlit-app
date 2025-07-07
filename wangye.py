@@ -1154,10 +1154,10 @@ with tab4:
 
 # ====================== tab5：网页图片提取PDF ======================
 with tab5:
-    st.header("就业质量报告图片提取与PDF合成")
+    st.header("就业质量报告图片提取")
 
     url = st.text_input("请输入网页链接", placeholder="例如：https://example.com/page.html")
-    mode = st.radio("选择抓取模式", ["静态模式（推荐线上）", "动态模式（本地运行）"])
+    mode = st.radio("选择抓取模式", ["静态模式", "动态模式"])
 
     output_folder = tempfile.mkdtemp()
 
@@ -1168,7 +1168,7 @@ with tab5:
             with st.spinner("正在抓取图片..."):
                 image_paths = []
                 try:
-                    if mode == "静态模式（推荐线上）":
+                    if mode == "静态模式":
                         image_paths = fetch_images_static(url, output_folder)
                     else:
                         image_paths = asyncio.run(fetch_images_dynamic(url, output_folder))
@@ -1177,21 +1177,22 @@ with tab5:
                     image_paths = []
 
             if image_paths:
-                st.success(f"成功提取 {len(image_paths)} 张图片")
-                for img_path in image_paths:
-                    st.image(img_path, use_column_width=True)
+                st.success(f"提取到 {len(image_paths)} 张图片")
 
-                pdf_path = os.path.join(output_folder, "就业质量报告图片合集.pdf")
+                show_preview = st.checkbox("显示图片预览", value=False)
+
+                if show_preview:
+                    with st.expander(f"点击查看 {len(image_paths)} 张图片预览"):
+                        for path in image_paths:
+                            st.image(path, width=150)
+
+                pdf_path = os.path.join(output_folder, "图片合集.pdf")
                 if images_to_pdf(image_paths, pdf_path):
                     with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            label="下载合成PDF",
-                            data=f,
-                            file_name="就业质量报告图片合集.pdf",
-                            mime="application/pdf"
-                        )
+                        st.download_button("下载PDF", f, file_name="图片合集.pdf", mime="application/pdf")
                 else:
-                    st.warning("PDF合成失败，请检查图片文件")
+                    st.warning("PDF合成失败")
+
             else:
                 st.warning("未提取到任何图片")
 
