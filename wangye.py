@@ -12,6 +12,8 @@ import base64
 import sys
 from io import BytesIO
 import requests
+import tempfile
+import asyncio
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
@@ -786,57 +788,54 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
-# 🅰️ 静态模式：requests + bs4
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
     try:
-        response = requests.get(url, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        img_tags = soup.find_all("img")
-        for idx, img in enumerate(img_tags, 1):
+        resp = requests.get(url, timeout=10)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        imgs = soup.find_all("img")
+        for idx, img in enumerate(imgs, 1):
             src = img.get("src")
             if not src:
                 continue
-            img_url = urljoin(url, src)
-            ext = os.path.splitext(urlparse(img_url).path)[1] or '.jpg'
+            full_url = urljoin(url, src)
+            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
             filename = f"img_{idx:03d}{ext}"
-            save_path = os.path.join(output_folder, filename)
+            path = os.path.join(output_folder, filename)
             try:
-                img_data = requests.get(img_url, timeout=10).content
-                with open(save_path, "wb") as f:
+                img_data = requests.get(full_url, timeout=10).content
+                with open(path, "wb") as f:
                     f.write(img_data)
-                image_paths.append(save_path)
+                image_paths.append(path)
             except:
                 continue
     except Exception as e:
         raise Exception(f"静态模式加载失败: {e}")
     return image_paths
 
-# 🅱️ 动态模式：playwright 抓取
 async def fetch_images_dynamic(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
-
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         try:
             await page.goto(url, wait_until="networkidle")
-            img_elements = await page.query_selector_all("img")
-            for idx, img in enumerate(img_elements, 1):
+            imgs = await page.query_selector_all("img")
+            for idx, img in enumerate(imgs, 1):
                 src = await img.get_attribute("src")
                 if not src:
                     continue
                 full_url = urljoin(url, src)
-                ext = os.path.splitext(urlparse(full_url).path)[1] or '.jpg'
+                ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
                 filename = f"img_{idx:03d}{ext}"
-                save_path = os.path.join(output_folder, filename)
+                path = os.path.join(output_folder, filename)
                 try:
-                    img_data = await page.request.get(full_url)
-                    with open(save_path, "wb") as f:
-                        f.write(await img_data.body())
-                    image_paths.append(save_path)
+                    img_resp = await page.request.get(full_url)
+                    with open(path, "wb") as f:
+                        f.write(await img_resp.body())
+                    image_paths.append(path)
                 except:
                     continue
         except Exception as e:
@@ -844,17 +843,16 @@ async def fetch_images_dynamic(url, output_folder):
         await browser.close()
     return image_paths
 
-# 图片转 PDF
 def images_to_pdf(image_paths, pdf_path):
-    image_list = []
+    images = []
     for path in sorted(image_paths):
         try:
             img = Image.open(path).convert("RGB")
-            image_list.append(img)
+            images.append(img)
         except:
             continue
-    if image_list:
-        image_list[0].save(pdf_path, save_all=True, append_images=image_list[1:])
+    if images:
+        images[0].save(pdf_path, save_all=True, append_images=images[1:])
         return True
     return False
 
@@ -1159,7 +1157,7 @@ with tab5:
     st.header("就业质量报告图片提取与PDF合成")
 
     url = st.text_input("请输入网页链接", placeholder="例如：https://example.com/page.html")
-    mode = st.radio("选择抓取模式", ["静态模式（推荐线上）", "动态模式（仅本地运行）"])
+    mode = st.radio("选择抓取模式", ["静态模式（推荐线上）", "动态模式（本地运行）"])
 
     output_folder = tempfile.mkdtemp()
 
