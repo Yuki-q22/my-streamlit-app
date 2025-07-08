@@ -798,102 +798,73 @@ def fetch_images_static(url, output_folder):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36"
     }
 
-    try:
-        st.info("🔍 正在请求网页...")
-        resp = requests.get(url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        imgs = soup.find_all("img")
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    imgs = soup.find_all("img")
 
-        if not imgs:
-            st.warning("⚠️ 页面中未发现任何 <img> 标签")
-            return []
+    if not imgs:
+        return []
 
-        st.info(f"🔍 发现 {len(imgs)} 个 <img> 标签，正在下载...")
-
-        for idx, img in enumerate(imgs, 1):
-            src = img.get("src") or img.get("data-src") or img.get("data-original")
-            if not src:
-                continue
-            full_url = urljoin(url, src)  # 构造绝对地址
-            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-            filename = f"img_{idx:03d}{ext}"
-            path = os.path.join(output_folder, filename)
-            try:
-                img_data = requests.get(full_url, headers=headers, timeout=10).content
-                with open(path, "wb") as f:
-                    f.write(img_data)
-                image_paths.append(path)
-            except Exception as e:
-                st.warning(f"⚠️ 下载图片失败: {full_url}，错误：{e}")
-                continue
-
-        st.success(f"✅ 图片抓取完成，共下载 {len(image_paths)} 张图片")
-
-    except Exception as e:
-        st.error(f"❌ 抓图失败: {e}")
+    for idx, img in enumerate(imgs, 1):
+        src = img.get("src") or img.get("data-src") or img.get("data-original")
+        if not src:
+            continue
+        full_url = urljoin(url, src)
+        ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
+        filename = f"img_{idx:03d}{ext}"
+        path = os.path.join(output_folder, filename)
+        try:
+            img_data = requests.get(full_url, headers=headers, timeout=10).content
+            with open(path, "wb") as f:
+                f.write(img_data)
+            image_paths.append(path)
+        except:
+            continue
 
     return image_paths
 
-
-# 压缩 PDF 文件（仅当超过 10MB）
-def compress_pdf(input_path, quality=80):
-    output_io = io.BytesIO()
-    try:
-        doc = fitz.open(input_path)
-        for page in doc:
-            images = page.get_images(full=True)
-            for img in images:
-                xref = img[0]
-                base_image = doc.extract_image(xref)
-                image_bytes = base_image["image"]
-                image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-                img_io = io.BytesIO()
-                image.save(img_io, format="JPEG", quality=quality)
-                img_io.seek(0)
-                doc.update_image(xref, img_io.read())
-        doc.save(output_io, garbage=4, deflate=True)
-        doc.close()
-        output_io.seek(0)
-        return output_io
-    except Exception as e:
-        st.warning(f"⚠️ 压缩失败: {e}")
-        return None
-
-
-# 图片转 PDF（并判断是否压缩）
-def images_to_pdf(image_paths):
+# 图片转 PDF，如果超过10MB则压缩保存
+def images_to_pdf(image_paths, output_pdf_path, compress_threshold_mb=10):
     images = []
     for path in sorted(image_paths):
         try:
             img = Image.open(path).convert("RGB")
             images.append(img)
-        except Exception:
+        except:
             continue
 
     if not images:
-        st.error("❌ 没有可用于合成 PDF 的图片")
-        return None
+        return False
 
+    # 保存初始PDF到内存
     temp_io = io.BytesIO()
     images[0].save(temp_io, format="PDF", save_all=True, append_images=images[1:])
     temp_io.seek(0)
 
-    pdf_size = len(temp_io.getvalue())
-    st.info(f"📄 初始 PDF 大小：{pdf_size / (1024 * 1024):.2f} MB")
+    size_mb = len(temp_io.getvalue()) / (1024 * 1024)
 
-    if pdf_size > 10 * 1024 * 1024:
-        st.info("📦 PDF 超过 10MB，正在压缩...")
-        compressed_pdf = compress_pdf(temp_io)
-        if compressed_pdf:
-            st.success("✅ 压缩完成")
-            return compressed_pdf
-        else:
-            st.warning("⚠️ 使用原始 PDF（压缩失败）")
-            return temp_io
+    if size_mb <= compress_threshold_mb:
+        with open(output_pdf_path, "wb") as f:
+            f.write(temp_io.getvalue())
+        return True
     else:
-        st.success("✅ PDF 未超过10MB，无需压缩")
-        return temp_io
+        try:
+            doc = fitz.open(stream=temp_io, filetype="pdf")
+            for page in doc:
+                for img in page.get_images(full=True):
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    image = Image.open(io.BytesIO(base_image["image"])).convert("RGB")
+                    img_io = io.BytesIO()
+                    image.save(img_io, format="JPEG", quality=80)
+                    img_io.seek(0)
+                    doc.update_image(xref, img_io.read())
+            doc.save(output_pdf_path, garbage=4, deflate=True)
+            doc.close()
+            return True
+        except:
+            return False
 
 
 
@@ -1220,11 +1191,12 @@ with tab5:
                 pdf_path = os.path.join(output_folder, "图片合集.pdf")
                 if images_to_pdf(image_paths, pdf_path):
                     with open(pdf_path, "rb") as f:
-                        st.download_button("下载合成PDF", f, file_name="就业质量报告.pdf", mime="application/pdf")
+                        st.download_button("📥 下载合成PDF", f, file_name="就业质量报告.pdf", mime="application/pdf")
                 else:
                     st.warning("PDF合成失败")
             else:
                 st.warning("未抓取到任何图片")
+
 
 
 # 页脚
