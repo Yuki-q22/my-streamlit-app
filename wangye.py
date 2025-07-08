@@ -10,6 +10,8 @@ from openpyxl.styles import PatternFill
 from openpyxl.styles import numbers
 import base64
 import sys
+import io
+import fitz
 from io import BytesIO
 import requests
 import tempfile
@@ -787,10 +789,12 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
+# 抓取图片
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
     try:
+        st.info("🔍 正在抓取网页图片...")
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -810,11 +814,39 @@ def fetch_images_static(url, output_folder):
                 image_paths.append(path)
             except Exception:
                 continue
+        st.success(f"✅ 共抓取到 {len(image_paths)} 张图片")
     except Exception as e:
-        raise Exception(f"静态模式加载失败: {e}")
+        st.error(f"❌ 抓图失败: {e}")
     return image_paths
 
-def images_to_pdf(image_paths, pdf_path):
+
+# 压缩 PDF 文件（仅当超过 10MB）
+def compress_pdf(input_path, quality=80):
+    output_io = io.BytesIO()
+    try:
+        doc = fitz.open(input_path)
+        for page in doc:
+            images = page.get_images(full=True)
+            for img in images:
+                xref = img[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                img_io = io.BytesIO()
+                image.save(img_io, format="JPEG", quality=quality)
+                img_io.seek(0)
+                doc.update_image(xref, img_io.read())
+        doc.save(output_io, garbage=4, deflate=True)
+        doc.close()
+        output_io.seek(0)
+        return output_io
+    except Exception as e:
+        st.warning(f"⚠️ 压缩失败: {e}")
+        return None
+
+
+# 图片转 PDF（并判断是否压缩）
+def images_to_pdf(image_paths):
     images = []
     for path in sorted(image_paths):
         try:
@@ -822,10 +854,30 @@ def images_to_pdf(image_paths, pdf_path):
             images.append(img)
         except Exception:
             continue
-    if images:
-        images[0].save(pdf_path, save_all=True, append_images=images[1:])
-        return True
-    return False
+
+    if not images:
+        st.error("❌ 没有可用于合成 PDF 的图片")
+        return None
+
+    temp_io = io.BytesIO()
+    images[0].save(temp_io, format="PDF", save_all=True, append_images=images[1:])
+    temp_io.seek(0)
+
+    pdf_size = len(temp_io.getvalue())
+    st.info(f"📄 初始 PDF 大小：{pdf_size / (1024 * 1024):.2f} MB")
+
+    if pdf_size > 10 * 1024 * 1024:
+        st.info("📦 PDF 超过 10MB，正在压缩...")
+        compressed_pdf = compress_pdf(temp_io)
+        if compressed_pdf:
+            st.success("✅ 压缩完成")
+            return compressed_pdf
+        else:
+            st.warning("⚠️ 使用原始 PDF（压缩失败）")
+            return temp_io
+    else:
+        st.success("✅ PDF 未超过10MB，无需压缩")
+        return temp_io
 
 
 
