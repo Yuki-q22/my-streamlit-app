@@ -10,8 +10,6 @@ from openpyxl.styles import PatternFill
 from openpyxl.styles import numbers
 import base64
 import sys
-import io
-import fitz
 from io import BytesIO
 import requests
 import tempfile
@@ -789,82 +787,45 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
-# 抓取图片
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36"
-    }
-
-    resp = requests.get(url, headers=headers, timeout=10)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
-    imgs = soup.find_all("img")
-
-    if not imgs:
-        return []
-
-    for idx, img in enumerate(imgs, 1):
-        src = img.get("src") or img.get("data-src") or img.get("data-original")
-        if not src:
-            continue
-        full_url = urljoin(url, src)
-        ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-        filename = f"img_{idx:03d}{ext}"
-        path = os.path.join(output_folder, filename)
-        try:
-            img_data = requests.get(full_url, headers=headers, timeout=10).content
-            with open(path, "wb") as f:
-                f.write(img_data)
-            image_paths.append(path)
-        except:
-            continue
-
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        imgs = soup.find_all("img")
+        for idx, img in enumerate(imgs, 1):
+            src = img.get("src")
+            if not src:
+                continue
+            full_url = urljoin(url, src)
+            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
+            filename = f"img_{idx:03d}{ext}"
+            path = os.path.join(output_folder, filename)
+            try:
+                img_data = requests.get(full_url, timeout=10).content
+                with open(path, "wb") as f:
+                    f.write(img_data)
+                image_paths.append(path)
+            except Exception:
+                continue
+    except Exception as e:
+        raise Exception(f"静态模式加载失败: {e}")
     return image_paths
 
-# 图片转 PDF，如果超过10MB则压缩保存
-def images_to_pdf(image_paths, output_pdf_path, compress_threshold_mb=10):
+def images_to_pdf(image_paths, pdf_path):
     images = []
     for path in sorted(image_paths):
         try:
             img = Image.open(path).convert("RGB")
             images.append(img)
-        except:
+        except Exception:
             continue
-
-    if not images:
-        return False
-
-    # 保存初始PDF到内存
-    temp_io = io.BytesIO()
-    images[0].save(temp_io, format="PDF", save_all=True, append_images=images[1:])
-    temp_io.seek(0)
-
-    size_mb = len(temp_io.getvalue()) / (1024 * 1024)
-
-    if size_mb <= compress_threshold_mb:
-        with open(output_pdf_path, "wb") as f:
-            f.write(temp_io.getvalue())
+    if images:
+        images[0].save(pdf_path, save_all=True, append_images=images[1:])
         return True
-    else:
-        try:
-            doc = fitz.open(stream=temp_io, filetype="pdf")
-            for page in doc:
-                for img in page.get_images(full=True):
-                    xref = img[0]
-                    base_image = doc.extract_image(xref)
-                    image = Image.open(io.BytesIO(base_image["image"])).convert("RGB")
-                    img_io = io.BytesIO()
-                    image.save(img_io, format="JPEG", quality=80)
-                    img_io.seek(0)
-                    doc.update_image(xref, img_io.read())
-            doc.save(output_pdf_path, garbage=4, deflate=True)
-            doc.close()
-            return True
-        except:
-            return False
+    return False
 
 
 
