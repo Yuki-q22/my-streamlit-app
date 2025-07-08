@@ -793,30 +793,46 @@ def process_data(dfA, dfB):
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36"
+    }
+
     try:
-        st.info("🔍 正在抓取网页图片...")
-        resp = requests.get(url, timeout=10)
+        st.info("🔍 正在请求网页...")
+        resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
         imgs = soup.find_all("img")
+
+        if not imgs:
+            st.warning("⚠️ 页面中未发现任何 <img> 标签")
+            return []
+
+        st.info(f"🔍 发现 {len(imgs)} 个 <img> 标签，正在下载...")
+
         for idx, img in enumerate(imgs, 1):
-            src = img.get("src")
+            src = img.get("src") or img.get("data-src") or img.get("data-original")
             if not src:
                 continue
-            full_url = urljoin(url, src)
+            full_url = urljoin(url, src)  # 构造绝对地址
             ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
             filename = f"img_{idx:03d}{ext}"
             path = os.path.join(output_folder, filename)
             try:
-                img_data = requests.get(full_url, timeout=10).content
+                img_data = requests.get(full_url, headers=headers, timeout=10).content
                 with open(path, "wb") as f:
                     f.write(img_data)
                 image_paths.append(path)
-            except Exception:
+            except Exception as e:
+                st.warning(f"⚠️ 下载图片失败: {full_url}，错误：{e}")
                 continue
-        st.success(f"✅ 共抓取到 {len(image_paths)} 张图片")
+
+        st.success(f"✅ 图片抓取完成，共下载 {len(image_paths)} 张图片")
+
     except Exception as e:
         st.error(f"❌ 抓图失败: {e}")
+
     return image_paths
 
 
