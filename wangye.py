@@ -17,6 +17,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
 
+
 # ============================
 # 初始化设置
 # ============================
@@ -235,7 +236,6 @@ def analyze_and_fix(text):
 
     # ========== 去重 ==========
     seen = set()
-
     def dedup(m):
         c = m.group(1)
         if c in seen:
@@ -256,6 +256,7 @@ def analyze_and_fix(text):
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
+
 
 
 def process_chunk(chunk):
@@ -313,6 +314,7 @@ def process_chunk(chunk):
     return chunk
 
 
+
 # ============================
 # 院校分提取相关函数
 # ============================
@@ -325,7 +327,6 @@ columns_to_convert = [
     '专业组代码', '专业代码', '招生代码', '最高分', '最低分', '平均分', '最低分位次（选填）',
     '招生人数（选填）'
 ]
-
 
 def process_score_file(file_path):
     try:
@@ -368,6 +369,7 @@ def process_score_file(file_path):
             '物理': '物理'  # 确保已经是"物理"的不变
         })
 
+
     try:
         # 分组字段（含专业组代码）
         group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
@@ -406,9 +408,7 @@ def process_score_file(file_path):
         raise Exception("筛选结果为空。")
 
     # 保留期望列，但排除招生专业和专业方向、专业备注、选科要求、次选科目
-    selected_columns = [col for col in expected_columns if
-                        col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）',
-                                                              '选科要求', '次选科目']]
+    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）', '选科要求', '次选科目']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -428,14 +428,12 @@ def process_score_file(file_path):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for cell in \
-                    list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
     except Exception as e:
         raise Exception(f"文件保存失败：{e}")
-
 
 # ============================
 # 保持文本格式
@@ -494,7 +492,6 @@ def process_remarks_file(file_path, progress_callback=None):
     except Exception as e:
         raise Exception(f"保存文件错误：{e}")
     return output_path
-
 
 # ============================
 # 一分一段数据处理
@@ -653,6 +650,8 @@ def process_segmentation_file(file_path):
     return output_path
 
 
+
+
 # ============================
 # 专业组代码匹配
 # ============================
@@ -787,60 +786,33 @@ def process_data(dfA, dfB):
 
     return dfA
 
-
-# ========== 就业质量报告图片提取 ==========
-def fetch_images_static(url, output_folder, retries=3, timeout=15, st_status_callback=None):
-    """
-    抓取网页图片，支持重试。
-    st_status_callback：可选，传入Streamlit的回调函数，用于更新状态提示。
-    """
+ # ========== 就业质量报告图片提取 ==========
+def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
-    session = requests.Session()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/114.0.0.0 Safari/537.36"
-    }
-    last_exception = None
-
-    for attempt in range(1, retries + 1):
-        if st_status_callback:
-            st_status_callback(f"尝试第 {attempt} 次连接网页...")
-        try:
-            resp = session.get(url, headers=headers, timeout=timeout)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "html.parser")
-            imgs = soup.find_all("img")
-            if st_status_callback:
-                st_status_callback(f"网页加载成功，找到 {len(imgs)} 张图片，开始下载...")
-            for idx, img in enumerate(imgs, 1):
-                src = img.get("src")
-                if not src:
-                    continue
-                full_url = urljoin(url, src)
-                ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-                filename = f"img_{idx:03d}{ext}"
-                path = os.path.join(output_folder, filename)
-                try:
-                    img_resp = session.get(full_url, headers=headers, timeout=timeout)
-                    img_resp.raise_for_status()
-                    with open(path, "wb") as f:
-                        f.write(img_resp.content)
-                    image_paths.append(path)
-                except Exception:
-                    # 单张图片请求失败，继续抓其他图片
-                    continue
-            if st_status_callback:
-                st_status_callback(f"图片下载完成，共保存 {len(image_paths)} 张图片。")
-            return image_paths
-        except Exception as e:
-            last_exception = e
-            if st_status_callback:
-                st_status_callback(f"第 {attempt} 次尝试失败: {e}")
-            # 这里不sleep，直接进入下一轮重试
-
-    raise Exception(f"静态模式加载失败: {last_exception}")
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        imgs = soup.find_all("img")
+        for idx, img in enumerate(imgs, 1):
+            src = img.get("src")
+            if not src:
+                continue
+            full_url = urljoin(url, src)
+            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
+            filename = f"img_{idx:03d}{ext}"
+            path = os.path.join(output_folder, filename)
+            try:
+                img_data = requests.get(full_url, timeout=10).content
+                with open(path, "wb") as f:
+                    f.write(img_data)
+                image_paths.append(path)
+            except Exception:
+                continue
+    except Exception as e:
+        raise Exception(f"静态模式加载失败: {e}")
+    return image_paths
 
 def images_to_pdf(image_paths, pdf_path):
     images = []
@@ -857,12 +829,11 @@ def images_to_pdf(image_paths, pdf_path):
 
 
 
-
 # ============================
 # Streamlit页面布局
 # ============================
 # 页面标题
-st.title("📊 数据处理工具1")
+st.title("📊 数据处理工具")
 st.markdown("---")
 
 # 功能说明
