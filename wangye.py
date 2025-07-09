@@ -16,6 +16,8 @@ import tempfile
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
+import fitz
+import time
 
 
 # ============================
@@ -787,34 +789,47 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
-def fetch_images_static(url, output_folder):
+def fetch_images_static(url, output_folder, retries=3, timeout=15):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        imgs = soup.find_all("img")
-        for idx, img in enumerate(imgs, 1):
-            src = img.get("src")
-            if not src:
+
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    for attempt in range(retries):
+        try:
+            resp = session.get(url, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            imgs = soup.find_all("img")
+            for idx, img in enumerate(imgs, 1):
+                src = img.get("src")
+                if not src:
+                    continue
+                full_url = urljoin(url, src)
+                ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
+                filename = f"img_{idx:03d}{ext}"
+                path = os.path.join(output_folder, filename)
+                try:
+                    img_resp = session.get(full_url, headers=headers, timeout=timeout)
+                    img_resp.raise_for_status()
+                    with open(path, "wb") as f:
+                        f.write(img_resp.content)
+                    image_paths.append(path)
+                except Exception:
+                    continue
+            return image_paths
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(2)  # 延迟重试
                 continue
-            full_url = urljoin(url, src)
-            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-            filename = f"img_{idx:03d}{ext}"
-            path = os.path.join(output_folder, filename)
-            try:
-                img_data = requests.get(full_url, timeout=10).content
-                with open(path, "wb") as f:
-                    f.write(img_data)
-                image_paths.append(path)
-            except Exception:
-                continue
-    except Exception as e:
-        raise Exception(f"静态模式加载失败: {e}")
+            raise Exception(f"静态模式加载失败: {e}")
     return image_paths
 
-def images_to_pdf(image_paths, pdf_path):
+
+def images_to_pdf(image_paths, pdf_path, max_size_mb=10):
     images = []
     for path in sorted(image_paths):
         try:
@@ -824,8 +839,35 @@ def images_to_pdf(image_paths, pdf_path):
             continue
     if images:
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
+        if os.path.getsize(pdf_path) > max_size_mb * 1024 * 1024:
+            compress_pdf(pdf_path, pdf_path, max_size_mb)
         return True
     return False
+
+
+def compress_pdf(input_pdf, output_pdf, max_size_mb):
+    doc = fitz.open(input_pdf)
+    zoom = 1.0
+
+    while True:
+        new_doc = fitz.open()
+        for page in doc:
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img_bytes = img.tobytes()
+            img_doc = fitz.open()
+            rect = fitz.Rect(0, 0, pix.width, pix.height)
+            page_img = img_doc.new_page(width=rect.width, height=rect.height)
+            page_img.insert_image(rect, stream=pix.tobytes())
+            new_doc.insert_pdf(img_doc)
+
+        new_doc.save(output_pdf)
+        new_doc.close()
+
+        size_mb = os.path.getsize(output_pdf) / (1024 * 1024)
+        if size_mb <= max_size_mb or zoom <= 0.5:
+            break
+        zoom -= 0.1  # 每次缩放减小 10%
 
 
 
