@@ -789,33 +789,55 @@ def process_data(dfA, dfB):
 
 
 # ========== 就业质量报告图片提取 ==========
-def fetch_images_static(url, output_folder):
+import os
+import requests
+from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
+from PIL import Image
+import time
+
+def fetch_images_static(url, output_folder, retries=3, timeout=15):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        imgs = soup.find_all("img")
-        for idx, img in enumerate(imgs, 1):
-            src = img.get("src")
-            if not src:
-                continue
-            full_url = urljoin(url, src)
-            ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
-            filename = f"img_{idx:03d}{ext}"
-            path = os.path.join(output_folder, filename)
-            try:
-                img_data = requests.get(full_url, timeout=10).content
-                with open(path, "wb") as f:
-                    f.write(img_data)
-                image_paths.append(path)
-            except Exception:
-                continue
-    except Exception as e:
-        raise Exception(f"静态模式加载失败: {e}")
-    return image_paths
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/114.0.0.0 Safari/537.36"
+    }
+    last_exception = None
 
+    for attempt in range(1, retries + 1):
+        try:
+            resp = session.get(url, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            imgs = soup.find_all("img")
+            for idx, img in enumerate(imgs, 1):
+                src = img.get("src")
+                if not src:
+                    continue
+                full_url = urljoin(url, src)
+                ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
+                filename = f"img_{idx:03d}{ext}"
+                path = os.path.join(output_folder, filename)
+                try:
+                    img_resp = session.get(full_url, headers=headers, timeout=timeout)
+                    img_resp.raise_for_status()
+                    with open(path, "wb") as f:
+                        f.write(img_resp.content)
+                    image_paths.append(path)
+                except Exception:
+                    # 单张图片请求失败，继续抓其他图片
+                    continue
+            # 成功返回结果
+            return image_paths
+        except Exception as e:
+            last_exception = e
+            time.sleep(2)  # 等待2秒再重试
+
+    # 如果重试完都失败，抛出异常
+    raise Exception(f"静态模式加载失败: {last_exception}")
 
 def images_to_pdf(image_paths, pdf_path):
     images = []
@@ -831,11 +853,12 @@ def images_to_pdf(image_paths, pdf_path):
     return False
 
 
+
 # ============================
 # Streamlit页面布局
 # ============================
 # 页面标题
-st.title("📊 数据处理工具")
+st.title("📊 数据处理工具1")
 st.markdown("---")
 
 # 功能说明
