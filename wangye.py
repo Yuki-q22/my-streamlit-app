@@ -852,42 +852,12 @@ def images_to_pdf(image_paths, pdf_path, max_size_mb=10):
             logging.warning(f"图片转换失败: {path}，错误: {e}")
             continue
 
-    if images:
-        images[0].save(pdf_path, save_all=True, append_images=images[1:])
-        if os.path.getsize(pdf_path) > max_size_mb * 1024 * 1024:
-            compress_pdf(pdf_path, pdf_path, max_size_mb)
-        return True
-    return False
-
-def compress_pdf(input_pdf, output_pdf, max_size_mb):
-    doc = fitz.open(input_pdf)
-    zoom = 1.0
-
-    while True:
-        new_doc = fitz.open()
-        for page in doc:
-            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-            img_doc = fitz.open()
-            rect = fitz.Rect(0, 0, pix.width, pix.height)
-            page_img = img_doc.new_page(width=rect.width, height=rect.height)
-            page_img.insert_image(rect, stream=pix.tobytes())
-            new_doc.insert_pdf(img_doc)
-
-        new_doc.save(output_pdf)
-        new_doc.close()
-
-        size_mb = os.path.getsize(output_pdf) / (1024 * 1024)
-        if size_mb <= max_size_mb or zoom <= 0.5:
-            break
-        zoom -= 0.1
-
-
 
 # ============================
 # Streamlit页面布局
 # ============================
 # 页面标题
-st.title("📊 数据处理工具1")
+st.title("📊 数据处理工具")
 st.markdown("---")
 
 # 功能说明
@@ -901,11 +871,11 @@ with st.expander("📌 功能说明", expanded=True):
 # 更新日志对话框
 with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
     st.markdown("""
-    ### 2025.6.14更新
-    专业组代码匹配功能  
-      - 需要上传专业分导入模板和库中招生计划导出模板
-      - 把库中导出招生计划类型尽量补充完整，否则容易出错
-      - 匹配结果需要检查
+    ### 2025.7.7更新
+    就业质量报告图片抓取功能  
+      - 抓取就业质量报告图片并压缩到10MB以下
+      - 如果抓取到的图片比较多，“下载PDF”的弹框会出现比较慢
+      - 注意：只能抓取静态页面的图片，动态页面的无法抓取
 
     ### 历史更新
 
@@ -945,6 +915,12 @@ with st.expander("📢 版本更新（2025.6.14更新）", expanded=False):
     ### 2025.6.12更新
     院校分提取逻辑更新  
       - 提取最高分改为取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
+      
+    ### 2025.6.14更新
+    专业组代码匹配功能  
+      - 需要上传专业分导入模板和库中招生计划导出模板
+      - 把库中导出招生计划类型尽量补充完整，否则容易出错
+      - 匹配结果需要检查
     
     """)
 
