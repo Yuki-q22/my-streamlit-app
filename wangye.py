@@ -887,7 +887,7 @@ def compress_pdf(input_pdf, output_pdf, max_size_mb):
 # Streamlit页面布局
 # ============================
 # 页面标题
-st.title("📊 数据处理工具")
+st.title("📊 数据处理工具1")
 st.markdown("---")
 
 # 功能说明
