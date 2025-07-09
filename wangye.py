@@ -789,7 +789,7 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
-def fetch_images_static(url, output_folder, retries=3, timeout=15):
+def fetch_images_static(url, output_folder, retries=3, timeout=30):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
 
@@ -804,6 +804,7 @@ def fetch_images_static(url, output_folder, retries=3, timeout=15):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             imgs = soup.find_all("img")
+
             for idx, img in enumerate(imgs, 1):
                 src = img.get("src")
                 if not src:
@@ -812,22 +813,34 @@ def fetch_images_static(url, output_folder, retries=3, timeout=15):
                 ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
                 filename = f"img_{idx:03d}{ext}"
                 path = os.path.join(output_folder, filename)
+
                 try:
                     img_resp = session.get(full_url, headers=headers, timeout=timeout)
                     img_resp.raise_for_status()
                     with open(path, "wb") as f:
                         f.write(img_resp.content)
                     image_paths.append(path)
-                except Exception:
+                except Exception as e:
+                    logging.warning(f"图片下载失败: {full_url}，错误: {e}")
                     continue
-            return image_paths
-        except Exception as e:
-            if attempt < retries - 1:
-                time.sleep(2)  # 延迟重试
-                continue
-            raise Exception(f"静态模式加载失败: {e}")
-    return image_paths
 
+            if not image_paths:
+                raise Exception("未成功下载任何图片")
+            return image_paths
+
+        except requests.exceptions.ConnectTimeout:
+            logging.warning(f"第 {attempt+1} 次尝试连接超时，正在重试...")
+        except requests.exceptions.ReadTimeout:
+            logging.warning(f"第 {attempt+1} 次读取超时，正在重试...")
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"第 {attempt+1} 次请求失败: {e}")
+        except Exception as e:
+            logging.warning(f"其他异常: {e}")
+
+        if attempt < retries - 1:
+            time.sleep(3)
+
+    raise Exception(f"静态模式加载失败: 无法连接至 {url}")
 
 def images_to_pdf(image_paths, pdf_path, max_size_mb=10):
     images = []
@@ -835,15 +848,16 @@ def images_to_pdf(image_paths, pdf_path, max_size_mb=10):
         try:
             img = Image.open(path).convert("RGB")
             images.append(img)
-        except Exception:
+        except Exception as e:
+            logging.warning(f"图片转换失败: {path}，错误: {e}")
             continue
+
     if images:
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
         if os.path.getsize(pdf_path) > max_size_mb * 1024 * 1024:
             compress_pdf(pdf_path, pdf_path, max_size_mb)
         return True
     return False
-
 
 def compress_pdf(input_pdf, output_pdf, max_size_mb):
     doc = fitz.open(input_pdf)
@@ -853,8 +867,6 @@ def compress_pdf(input_pdf, output_pdf, max_size_mb):
         new_doc = fitz.open()
         for page in doc:
             pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            img_bytes = img.tobytes()
             img_doc = fitz.open()
             rect = fitz.Rect(0, 0, pix.width, pix.height)
             page_img = img_doc.new_page(width=rect.width, height=rect.height)
@@ -867,7 +879,7 @@ def compress_pdf(input_pdf, output_pdf, max_size_mb):
         size_mb = os.path.getsize(output_pdf) / (1024 * 1024)
         if size_mb <= max_size_mb or zoom <= 0.5:
             break
-        zoom -= 0.1  # 每次缩放减小 10%
+        zoom -= 0.1
 
 
 
@@ -875,7 +887,7 @@ def compress_pdf(input_pdf, output_pdf, max_size_mb):
 # Streamlit页面布局
 # ============================
 # 页面标题
-st.title("📊 数据处理工具1")
+st.title("📊 数据处理工具")
 st.markdown("---")
 
 # 功能说明
