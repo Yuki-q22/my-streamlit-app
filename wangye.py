@@ -789,14 +789,11 @@ def process_data(dfA, dfB):
 
 
 # ========== 就业质量报告图片提取 ==========
-import os
-import requests
-from urllib.parse import urljoin, urlparse
-from bs4 import BeautifulSoup
-from PIL import Image
-import time
-
-def fetch_images_static(url, output_folder, retries=3, timeout=15):
+def fetch_images_static(url, output_folder, retries=3, timeout=15, st_status_callback=None):
+    """
+    抓取网页图片，支持重试。
+    st_status_callback：可选，传入Streamlit的回调函数，用于更新状态提示。
+    """
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
     session = requests.Session()
@@ -808,11 +805,15 @@ def fetch_images_static(url, output_folder, retries=3, timeout=15):
     last_exception = None
 
     for attempt in range(1, retries + 1):
+        if st_status_callback:
+            st_status_callback(f"尝试第 {attempt} 次连接网页...")
         try:
             resp = session.get(url, headers=headers, timeout=timeout)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             imgs = soup.find_all("img")
+            if st_status_callback:
+                st_status_callback(f"网页加载成功，找到 {len(imgs)} 张图片，开始下载...")
             for idx, img in enumerate(imgs, 1):
                 src = img.get("src")
                 if not src:
@@ -830,13 +831,15 @@ def fetch_images_static(url, output_folder, retries=3, timeout=15):
                 except Exception:
                     # 单张图片请求失败，继续抓其他图片
                     continue
-            # 成功返回结果
+            if st_status_callback:
+                st_status_callback(f"图片下载完成，共保存 {len(image_paths)} 张图片。")
             return image_paths
         except Exception as e:
             last_exception = e
-            time.sleep(2)  # 等待2秒再重试
+            if st_status_callback:
+                st_status_callback(f"第 {attempt} 次尝试失败: {e}")
+            # 这里不sleep，直接进入下一轮重试
 
-    # 如果重试完都失败，抛出异常
     raise Exception(f"静态模式加载失败: {last_exception}")
 
 def images_to_pdf(image_paths, pdf_path):
@@ -851,6 +854,7 @@ def images_to_pdf(image_paths, pdf_path):
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
         return True
     return False
+
 
 
 
