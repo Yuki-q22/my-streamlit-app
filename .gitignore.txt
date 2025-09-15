@@ -1,0 +1,41 @@
+# ========== Python 编译缓存 ==========
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ========== 虚拟环境 ==========
+.env/
+.venv/
+env/
+venv/
+
+# ========== Jupyter Notebook ==========
+.ipynb_checkpoints/
+
+# ========== 系统生成的杂项文件 ==========
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ========== VSCode / PyCharm 工作区配置（可选） ==========
+.vscode/
+.idea/
+
+# ========== 日志与临时文件 ==========
+*.log
+*.tmp
+*.bak
+
+# ========== Streamlit 临时缓存 ==========
+.streamlit/config.toml
+.streamlit/secrets.toml
+
+# ========== 如果有 requirements 文件备份 ==========
+requirements*.bak
+requirements*.old
+
+# ========== 保留数据文件（不要屏蔽 .xlsx） ==========
+# ⚠️ 不要加入 *.xlsx，否则 Streamlit Cloud 无法读取你的数据
+# 如果你要忽略某些 Excel 文件，请单独指定，例如：
+# data/tmp_*.xlsx
