@@ -849,7 +849,7 @@ with st.expander("📌 功能说明", expanded=True):
 # 更新日志对话框
 with st.expander("📢 版本更新（2025.7.7更新）（必看！）", expanded=False):
     st.markdown("""
-    ### 2025.9.15更新
+    ### 2025.7.7更新
     就业质量报告图片抓取功能  
       - 抓取就业质量报告图片
       - 如果抓取到的图片比较多，“下载PDF”的弹框会出现比较慢
