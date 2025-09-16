@@ -369,28 +369,35 @@ def process_score_file(file_path):
             '物理': '物理'  # 确保已经是"物理"的不变
         })
 
-
     try:
-        # 分组字段（含专业组代码）
-        group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
+        # 判断是否有专业组代码列，且不全为空
+        if '专业组代码' in df.columns and df['专业组代码'].notna().any():
+            group_fields = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）', '专业组代码']
+        else:
+            group_fields = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '招生类型（选填）']
 
-        # 取每组最低分所在行索引
-        min_indices = df.groupby(group_with_code)['最低分'].idxmin()
+        # 每组最低分所在行
+        min_indices = df.groupby(group_fields)['最低分'].idxmin()
 
-        # 取每组最高分数（单纯数值，不取对应行）
-        max_scores = df.groupby(group_with_code)['最高分'].max()
+        # 每组最高分
+        max_scores = df.groupby(group_fields)['最高分'].max()
 
-        # 取最低分行数据
+        # 取最低分行
         result = df.loc[min_indices].copy()
 
-        # 招生人数为分组总和
-        enroll_groups = df.groupby(group_with_code)['招生人数（选填）'].sum()
+        # 补充最高分
+        def get_max_score(row):
+            key = tuple(row[col] for col in group_fields)
+            return max_scores.get(key, None)
 
-        # 录取人数为分组总和
-        code_groups = df.groupby(group_with_code)['录取人数（选填）'].sum()
+        result['最高分'] = result.apply(get_max_score, axis=1)
+
+        # 招生人数、录取人数按分组总和
+        enroll_groups = df.groupby(group_fields)['招生人数（选填）'].sum()
+        code_groups = df.groupby(group_fields)['录取人数（选填）'].sum()
 
         def get_group_total(row, column_name):
-            key = tuple(row[col] for col in group_with_code)
+            key = tuple(row[col] for col in group_fields)
             if column_name == '招生人数（选填）':
                 return enroll_groups.get(key, '')
             elif column_name == '录取人数（选填）':
@@ -399,7 +406,6 @@ def process_score_file(file_path):
 
         result['招生人数（选填）'] = result.apply(lambda row: get_group_total(row, '招生人数（选填）'), axis=1)
         result['录取人数（选填）'] = result.apply(lambda row: get_group_total(row, '录取人数（选填）'), axis=1)
-
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
