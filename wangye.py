@@ -540,11 +540,6 @@ def process_new_template_file(file_path):
     df['校统考分'] = pd.to_numeric(df['校统考分'], errors='coerce')
     df['校文化分'] = pd.to_numeric(df['校文化分'], errors='coerce')
 
-    # 构造最高分列（如果没有，直接用最低分初始化）
-    if '最高分' not in df.columns:
-        df['最高分'] = df['最低分']
-    else:
-        df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
 
     # 删除最低分为空的行
     df = df.dropna(subset=['最低分'])
@@ -571,18 +566,10 @@ def process_new_template_file(file_path):
         # 每组最低分所在行
         min_indices = df.groupby(group_fields)['最低分'].idxmin()
 
-        # 每组最高分
-        max_scores = df.groupby(group_fields)['最高分'].max()
 
         # 取最低分行
         result = df.loc[min_indices].copy()
 
-        # 补充最高分
-        def get_max_score(row):
-            key = tuple(row[col] for col in group_fields)
-            return max_scores.get(key, None)
-
-        result['最高分'] = result.apply(get_max_score, axis=1)
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
