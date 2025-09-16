@@ -316,7 +316,7 @@ def process_chunk(chunk):
 
 
 # ============================
-# 院校分提取相关函数
+# 院校分提取相关函数（普通类）
 # ============================
 expected_columns = [
     '学校名称', '省份', '招生专业', '专业方向（选填）', '专业备注（选填）', '一级层次', '招生科类', '招生批次',
@@ -498,6 +498,129 @@ def process_remarks_file(file_path, progress_callback=None):
     except Exception as e:
         raise Exception(f"保存文件错误：{e}")
     return output_path
+
+# ============================
+# 院校分数据处理（艺体类）
+# ============================
+# ============================
+# 新模板院校分提取相关函数
+# ============================
+expected_new_columns = [
+    '学校名称', '省份', '专业', '专业方向（选填）', '专业备注（选填）', '专业层次',
+    '专业类别', '是否校考', '招生类别', '招生批次', '最低分', '最低分位次（选填）',
+    '专业组代码', '首选科目', '选科要求', '次选科目', '招生代码', '校统考分',
+    '校文化分', '专业代码', '数据来源'
+]
+columns_to_convert_new = [
+    '专业组代码', '专业代码', '招生代码', '最低分', '最低分位次（选填）',
+    '校统考分', '校文化分'
+]
+
+def process_new_template_file(file_path):
+    try:
+        df = pd.read_excel(file_path, header=2, dtype={
+            '专业组代码': str,
+            '专业代码': str,
+            '招生代码': str,
+            '最低分': str,
+            '最低分位次（选填）': str,
+            '校统考分': str,
+            '校文化分': str
+        }, keep_default_na=False, engine='openpyxl')
+    except Exception as e:
+        raise Exception(f"读取文件错误：{e}")
+
+    # 检查必需列
+    missing_columns = [col for col in expected_new_columns if col not in df.columns]
+    if missing_columns:
+        raise Exception(f"文件缺少以下列：{missing_columns}")
+
+    # 数值列转为数值型
+    df['最低分'] = pd.to_numeric(df['最低分'], errors='coerce')
+    df['校统考分'] = pd.to_numeric(df['校统考分'], errors='coerce')
+    df['校文化分'] = pd.to_numeric(df['校文化分'], errors='coerce')
+
+    # 构造最高分列（如果没有，直接用最低分初始化）
+    if '最高分' not in df.columns:
+        df['最高分'] = df['最低分']
+    else:
+        df['最高分'] = pd.to_numeric(df['最高分'], errors='coerce')
+
+    # 删除最低分为空的行
+    df = df.dropna(subset=['最低分'])
+    if df.empty:
+        raise Exception("数据处理后为空。")
+
+    # 首选科目清洗
+    if '首选科目' in df.columns:
+        df['首选科目'] = df['首选科目'].str.strip()
+        df['首选科目'] = df['首选科目'].replace({
+            '历': '历史',
+            '物': '物理',
+            '历史': '历史',
+            '物理': '物理'
+        })
+
+    try:
+        # 判断分组字段
+        if '专业组代码' in df.columns and df['专业组代码'].notna().any():
+            group_fields = ['学校名称', '省份', '专业层次', '专业类别', '招生类别', '招生批次', '专业组代码']
+        else:
+            group_fields = ['学校名称', '省份', '专业层次', '专业类别', '招生类别', '招生批次']
+
+        # 每组最低分所在行
+        min_indices = df.groupby(group_fields)['最低分'].idxmin()
+
+        # 每组最高分
+        max_scores = df.groupby(group_fields)['最高分'].max()
+
+        # 取最低分行
+        result = df.loc[min_indices].copy()
+
+        # 补充最高分
+        def get_max_score(row):
+            key = tuple(row[col] for col in group_fields)
+            return max_scores.get(key, None)
+
+        result['最高分'] = result.apply(get_max_score, axis=1)
+
+    except Exception as e:
+        raise Exception(f"分组字段错误：{e}")
+
+    if result.empty:
+        raise Exception("筛选结果为空。")
+
+    # 保留期望列
+    selected_columns = [col for col in expected_new_columns if col in result.columns]
+    if '最高分' not in selected_columns:
+        selected_columns.insert(selected_columns.index('最低分'), '最高分')
+    result = result[selected_columns]
+
+    # 输出文件路径
+    output_path = file_path.replace('.xlsx', '_院校分.xlsx')
+
+    try:
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            result.to_excel(writer, index=False)
+            worksheet = writer.sheets['Sheet1']
+
+            # 设置文本格式
+            for col in ['专业组代码', '专业代码', '招生代码']:
+                if col in result.columns:
+                    col_idx = result.columns.get_loc(col) + 1
+                    for row in range(2, len(result) + 2):
+                        worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
+
+            for col in columns_to_convert_new:
+                if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
+                    col_idx = result.columns.get_loc(col) + 1
+                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                        cell.number_format = numbers.FORMAT_TEXT
+
+        return output_path
+    except Exception as e:
+        raise Exception(f"文件保存失败：{e}")
+
 
 # ============================
 # 一分一段数据处理
@@ -911,12 +1034,12 @@ with st.expander("📢 版本更新（2025.9.16更新）（必看！）", expand
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["院校分提取", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）", "就业质量报告图片提取"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["院校分提取（普通类）","院校分提取（艺体类）", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）", "就业质量报告图片提取"])
 
 # ====================== 院校分提取 ======================
 with tab1:
-    st.header("院校分提取")
+    st.header("院校分提取（普通类）")
 
     # 文件上传
     uploaded_file = st.file_uploader("选择Excel文件", type=["xlsx"], key="score_file")
@@ -964,8 +1087,60 @@ with tab1:
             except Exception as e:
                 st.error(f"处理过程中发生错误: {str(e)}")
 
-# ====================== 学业桥数据处理 ======================
+# ====================== 院校分提取（艺体类） ======================
 with tab2:
+    st.header("院校分提取（艺体类）")
+
+    # 文件上传
+    uploaded_file_new = st.file_uploader("选择Excel文件", type=["xlsx"], key="new_score_file")
+
+    if uploaded_file_new is not None:
+        st.success(f"已选择文件: {uploaded_file_new.name}")
+
+        # 显示处理进度
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        status_text.text("准备处理...")
+
+        # 处理按钮
+        if st.button("开始数据处理", key="process_new_score"):
+            try:
+                # 保存上传的文件到临时位置
+                temp_file = "temp_new_score.xlsx"
+                with open(temp_file, "wb") as f:
+                    f.write(uploaded_file_new.getbuffer())
+
+                # 处理文件
+                for percent_complete in range(0, 101, 10):
+                    progress_bar.progress(percent_complete)
+                    status_text.text(f"处理中... {percent_complete}%")
+
+                    # 调用新模板处理函数
+                    if percent_complete == 100:
+                        output_path = process_new_template_file(temp_file)
+
+                # 处理完成
+                status_text.text("处理完成！")
+                st.balloons()
+
+                # 提供下载链接
+                with open(output_path, "rb") as f:
+                    bytes_data = f.read()
+                b64 = base64.b64encode(bytes_data).decode()
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="院校分（艺体类）提取结果.xlsx">点击下载处理结果</a>'
+                st.markdown(href, unsafe_allow_html=True)
+
+                # 清理临时文件
+                os.remove(temp_file)
+                os.remove(output_path)
+
+            except Exception as e:
+                st.error(f"处理过程中发生错误: {str(e)}")
+
+
+
+# ====================== 学业桥数据处理 ======================
+with tab3:
     st.header("学业桥数据处理")
 
     # 文件上传
@@ -1018,7 +1193,7 @@ with tab2:
                 st.error(f"处理过程中发生错误: {str(e)}")
 
 # ====================== 一分一段校验 ======================
-with tab3:
+with tab4:
     st.header("一分一段校验")
 
     # 文件上传
@@ -1078,7 +1253,7 @@ with tab3:
                 st.error(f"处理过程中发生错误: {str(e)}")
 
 # ====================== 专业组代码匹配 ======================
-with tab4:
+with tab5:
     st.header("专业组代码匹配（需要检查！）")
 
     uploaded_fileA = st.file_uploader("上传专业分导入模板", type=["xls", "xlsx"], key="fileA")
@@ -1140,7 +1315,7 @@ with tab4:
         st.info("请先上传两个Excel文件")
 
 # ====================== tab5：网页图片提取PDF ======================
-with tab5:
+with tab6:
     st.header("就业质量报告图片提取")
 
     url = st.text_input("请输入就业质量报告网页链接", placeholder="例如：https://www.example.com/report.html")
