@@ -137,8 +137,8 @@ def normalize_brackets(text):
     text = str(text).strip()
 
     # 替换所有括号变体为中文括号
-    text = re.sub(r'[\{\[\【]', '（', text)  # 左括号
-    text = re.sub(r'[\}\]\】]', '）', text)  # 右括号
+    text = re.sub(r'[{\[【]', '（', text)  # 左括号
+    text = re.sub(r'[}\]】]', '）', text)  # 右括号
     text = re.sub(r'[<《]', '（', text)  # 左书名号替换为左括号
     text = re.sub(r'[>》]', '）', text)  # 右书名号替换为右括号
 
@@ -357,7 +357,8 @@ def process_score_file(file_path):
     if df.empty:
         raise Exception("数据处理后为空。")
 
-    df['招生类型（选填）'] = df['招生类型（选填）'].replace([None], '')
+    df['招生类型（选填）'] = df['招生类型（选填）'].replace(None, '')
+
 
     # 首选科目转换逻辑
     if '首选科目' in df.columns:
@@ -794,7 +795,7 @@ def clean_remark(text):
     cleaned = str(text).strip().lower()
 
     # 移除括号及其内容（保留括号内的文本）
-    cleaned = re.sub(r'[\(\)（）]', '', cleaned)
+    cleaned = re.sub(r'[()（）]', '', cleaned)
 
     # 移除常见分隔符（保留分隔符之间的文本）
     cleaned = re.sub(r'[;；、,:：]', ' ', cleaned)
