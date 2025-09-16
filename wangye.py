@@ -17,6 +17,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
 
+
 # ============================
 # 初始化设置
 # ============================
@@ -235,7 +236,6 @@ def analyze_and_fix(text):
 
     # ========== 去重 ==========
     seen = set()
-
     def dedup(m):
         c = m.group(1)
         if c in seen:
@@ -256,6 +256,7 @@ def analyze_and_fix(text):
             issues.append(f"错别字：'{typo}'→'{corr}'")
 
     return text, issues
+
 
 
 def process_chunk(chunk):
@@ -313,6 +314,7 @@ def process_chunk(chunk):
     return chunk
 
 
+
 # ============================
 # 院校分提取相关函数
 # ============================
@@ -325,7 +327,6 @@ columns_to_convert = [
     '专业组代码', '专业代码', '招生代码', '最高分', '最低分', '平均分', '最低分位次（选填）',
     '招生人数（选填）'
 ]
-
 
 def process_score_file(file_path):
     try:
@@ -368,6 +369,7 @@ def process_score_file(file_path):
             '物理': '物理'  # 确保已经是"物理"的不变
         })
 
+
     try:
         # 分组字段（含专业组代码）
         group_with_code = ['学校名称', '省份', '一级层次', '招生科类', '招生批次', '专业组代码', '招生类型（选填）']
@@ -406,9 +408,7 @@ def process_score_file(file_path):
         raise Exception("筛选结果为空。")
 
     # 保留期望列，但排除招生专业和专业方向、专业备注、选科要求、次选科目
-    selected_columns = [col for col in expected_columns if
-                        col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）',
-                                                              '选科要求', '次选科目']]
+    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）', '选科要求', '次选科目']]
     result = result[selected_columns]
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
@@ -428,14 +428,12 @@ def process_score_file(file_path):
             for col in columns_to_convert:
                 if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
                     col_idx = result.columns.get_loc(col) + 1
-                    for cell in \
-                    list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
+                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
                         cell.number_format = numbers.FORMAT_TEXT
 
         return output_path
     except Exception as e:
         raise Exception(f"文件保存失败：{e}")
-
 
 # ============================
 # 保持文本格式
@@ -494,7 +492,6 @@ def process_remarks_file(file_path, progress_callback=None):
     except Exception as e:
         raise Exception(f"保存文件错误：{e}")
     return output_path
-
 
 # ============================
 # 一分一段数据处理
@@ -653,6 +650,8 @@ def process_segmentation_file(file_path):
     return output_path
 
 
+
+
 # ============================
 # 专业组代码匹配
 # ============================
@@ -787,8 +786,7 @@ def process_data(dfA, dfB):
 
     return dfA
 
-
-# ========== 就业质量报告图片提取 ==========
+ # ========== 就业质量报告图片提取 ==========
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
@@ -816,7 +814,6 @@ def fetch_images_static(url, output_folder):
         raise Exception(f"静态模式加载失败: {e}")
     return image_paths
 
-
 def images_to_pdf(image_paths, pdf_path):
     images = []
     for path in sorted(image_paths):
@@ -829,6 +826,7 @@ def images_to_pdf(image_paths, pdf_path):
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
         return True
     return False
+
 
 
 # ============================
@@ -893,13 +891,13 @@ with st.expander("📢 版本更新（2025.7.7更新）（必看！）", expande
     ### 2025.6.12更新
     院校分提取逻辑更新  
       - 提取最高分改为取同一个“学校-省份-层次-科类-批次-类型（-专业组代码）”下的最高分
-
+      
     ### 2025.6.14更新
     专业组代码匹配功能  
       - 需要上传专业分导入模板和库中招生计划导出模板
       - 把库中导出招生计划类型尽量补充完整，否则容易出错
       - 匹配结果需要检查
-
+    
 
     """)
 

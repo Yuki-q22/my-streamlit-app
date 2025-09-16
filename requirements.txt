@@ -6,3 +6,4 @@ pillow
 requests
 beautifulsoup4
 pymupdf
+
