@@ -502,9 +502,7 @@ def process_remarks_file(file_path, progress_callback=None):
 # ============================
 # 院校分数据处理（艺体类）
 # ============================
-# ============================
-# 新模板院校分提取相关函数
-# ============================
+
 expected_new_columns = [
     '学校名称', '省份', '专业', '专业方向（选填）', '专业备注（选填）', '专业层次',
     '专业类别', '是否校考', '招生类别', '招生批次', '最低分', '最低分位次（选填）',
@@ -540,7 +538,6 @@ def process_new_template_file(file_path):
     df['校统考分'] = pd.to_numeric(df['校统考分'], errors='coerce')
     df['校文化分'] = pd.to_numeric(df['校文化分'], errors='coerce')
 
-
     # 删除最低分为空的行
     df = df.dropna(subset=['最低分'])
     if df.empty:
@@ -566,10 +563,8 @@ def process_new_template_file(file_path):
         # 每组最低分所在行
         min_indices = df.groupby(group_fields)['最低分'].idxmin()
 
-
         # 取最低分行
         result = df.loc[min_indices].copy()
-
 
     except Exception as e:
         raise Exception(f"分组字段错误：{e}")
@@ -579,8 +574,6 @@ def process_new_template_file(file_path):
 
     # 保留期望列
     selected_columns = [col for col in expected_new_columns if col in result.columns]
-    if '最高分' not in selected_columns:
-        selected_columns.insert(selected_columns.index('最低分'), '最高分')
     result = result[selected_columns]
 
     # 输出文件路径
@@ -607,6 +600,7 @@ def process_new_template_file(file_path):
         return output_path
     except Exception as e:
         raise Exception(f"文件保存失败：{e}")
+
 
 
 # ============================
