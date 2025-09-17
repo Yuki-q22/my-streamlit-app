@@ -357,7 +357,7 @@ def process_score_file(file_path):
     if df.empty:
         raise Exception("数据处理后为空。")
 
-    df['招生类型（选填）'] = df['招生类型（选填）'].replace(None, '')
+    df['招生类型（选填）'] = df['招生类型（选填）'].fillna('')
 
 
     # 首选科目转换逻辑
