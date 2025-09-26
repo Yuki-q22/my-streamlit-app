@@ -557,9 +557,9 @@ def process_new_template_file(file_path):
     try:
         # 判断分组字段
         if '专业组代码' in df.columns and df['专业组代码'].notna().any():
-            group_fields = ['学校名称', '省份', '专业方向', '专业层次', '专业类别', '招生类别', '招生批次', '专业组代码']
+            group_fields = ['学校名称', '省份', '专业方向（选填）', '专业层次', '专业类别', '招生类别', '招生批次', '专业组代码']
         else:
-            group_fields = ['学校名称', '省份', '专业方向', '专业层次', '专业类别', '招生类别', '招生批次']
+            group_fields = ['学校名称', '省份', '专业方向（选填）', '专业层次', '专业类别', '招生类别', '招生批次']
 
         # 每组最低分所在行
         min_indices = df.groupby(group_fields)['最低分'].idxmin()
