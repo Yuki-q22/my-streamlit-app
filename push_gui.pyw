@@ -106,7 +106,7 @@ class GitPushApp:
     # ============ 新增：检查代理并自动取消 ============
     def check_proxy(self):
         proxy = subprocess.getoutput("git config --global --get https.proxy")
-        if proxy and proxy.startswith("http://127.0.0.1"):
+        if proxy and proxy.startswith("http://127.0.0.1:58464"):
             host, port = proxy.replace("http://", "").split(":")
             self.log(f"检测到本地代理: {proxy}，检查端口是否可用...")
             if not self.test_port(host, int(port)):
