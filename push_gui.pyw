@@ -169,8 +169,18 @@ class GitPushApp:
             text=True,
             capture_output=True
         )
+
         if not result.stdout.strip():
-            self.log("没有新改动需要提交。")
+            # 如果缓存区为空，检查是否刚刚有自动提交
+            last_commit = subprocess.getoutput("git log -1 --pretty=%B")
+            if last_commit == "auto-commit before pull":
+                self.log("检测到自动提交，执行推送...")
+                success &= self.run_git_command("git push", cwd=repo_dir)
+                if not success:
+                    self.log("尝试第一次推送，设置 upstream...")
+                    success &= self.run_git_command("git push -u origin main", cwd=repo_dir)
+            else:
+                self.log("没有新改动需要提交。")
         else:
             # 4. 提交改动
             success &= self.run_git_command(f'git commit -m "{commit_msg}"', cwd=repo_dir)
