@@ -1,204 +1,119 @@
 import tkinter as tk
-from tkinter import messagebox, scrolledtext
+from tkinter import messagebox, scrolledtext, simpledialog
 import subprocess
 import os
-import socket
+
 
 class GitPushApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Git 更新工具")
-        self.root.geometry("720x720")
+        self.root.geometry("720x550")
         self.root.configure(bg="#f0f0f0")  # 背景色
 
         # 顶部标题
-        tk.Label(root, text="请选择要更新的文件", font=("微软雅黑", 16, "bold"), bg="#f0f0f0").pack(pady=10)
+        tk.Label(root, text="Git 更新工具", font=("Arial", 18, "bold"), bg="#f0f0f0").pack(pady=10)
 
-        # 文件复选框区域，带边框
-        self.files_frame = tk.LabelFrame(root, text="文件列表", padx=20, pady=10, bg="#ffffff", font=("微软雅黑", 12))
-        self.files_frame.pack(padx=20, pady=10, fill="x")
-        self.file_vars = {}
+        # 输出框
+        self.output = scrolledtext.ScrolledText(root, width=80, height=25, wrap=tk.WORD, state="disabled")
+        self.output.pack(padx=10, pady=10)
 
-        # 全选复选框
-        self.select_all_var = tk.BooleanVar()
-        select_all_chk = tk.Checkbutton(
-            self.files_frame,
-            text="全选",
-            variable=self.select_all_var,
-            command=self.toggle_all,
-            bg="#ffffff",
-            font=("微软雅黑", 14, "bold")
-        )
-        select_all_chk.pack(anchor="w", pady=5)
-
-        # 目标文件复选框
-        self.target_files = ["requirements.txt", "school_data.xlsx", "wangye.py", "招生专业.xlsx"]
-
-        for f in self.target_files:
-            var = tk.BooleanVar()
-            chk = tk.Checkbutton(
-                self.files_frame,
-                text=f,
-                variable=var,
-                bg="#ffffff",
-                font=("微软雅黑", 13)
-            )
-            chk.pack(anchor="w", padx=20, pady=3)
-            self.file_vars[f] = var
-
-        # 提交信息输入
-        tk.Label(root, text="提交信息：", font=("微软雅黑", 12), bg="#f0f0f0").pack(pady=5)
-        self.entry_msg = tk.Entry(root, width=50, font=("微软雅黑", 12))
-        self.entry_msg.insert(0, "update")
-        self.entry_msg.pack(pady=5)
-
-        # 按钮
+        # 按钮区域
         btn_frame = tk.Frame(root, bg="#f0f0f0")
-        btn_frame.pack(pady=10)
-        tk.Button(btn_frame, text="刷新文件列表", command=self.refresh_file_list, bg="#4a90e2", fg="white",
-                  width=15, font=("微软雅黑", 12)).pack(side="left", padx=10)
-        tk.Button(btn_frame, text="更新", command=self.do_git_ops, bg="#50c878", fg="white",
-                  width=15, font=("微软雅黑", 12)).pack(side="left", padx=10)
+        btn_frame.pack()
 
-        # 日志输出
-        tk.Label(root, text="更新日志：", font=("微软雅黑", 12), bg="#f0f0f0").pack()
-        self.log_box = scrolledtext.ScrolledText(root, width=85, height=18, font=("Consolas", 11), bg="#f7f7f7")
-        self.log_box.pack(pady=5, padx=20)
+        tk.Button(btn_frame, text="更新 (Pull)", command=self.update_repo, width=15).grid(row=0, column=0, padx=10)
+        tk.Button(btn_frame, text="推送 (Push)", command=self.push_repo, width=15).grid(row=0, column=1, padx=10)
 
-    def log(self, text):
-        """日志打印"""
-        self.log_box.insert("end", text + "\n")
-        self.log_box.see("end")
-        self.root.update()
-
-    def toggle_all(self):
-        state = self.select_all_var.get()
-        for var in self.file_vars.values():
-            var.set(state)
-
-    def run_git_command(self, cmd, cwd=None):
+    def run_command(self, cmd):
+        """运行命令并返回输出"""
         try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                cwd=cwd,
-                text=True,
-                capture_output=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-            output = ""
-            if result.stdout:
-                output += result.stdout
-            if result.stderr:
-                output += result.stderr
-            if output:
-                self.log(output.strip())
-            return result.returncode == 0
+            result = subprocess.run(cmd, shell=True, text=True, capture_output=True, encoding="utf-8")
+            return result.stdout + result.stderr
         except Exception as e:
-            self.log(f"执行出错：{e}")
-            return False
+            return str(e)
 
-    def refresh_file_list(self):
-        for f, var in self.file_vars.items():
-            var.set(False)
-        self.select_all_var.set(False)
+    def append_output(self, text):
+        """在输出框中追加文本"""
+        self.output.configure(state="normal")
+        self.output.insert(tk.END, text + "\n")
+        self.output.see(tk.END)
+        self.output.configure(state="disabled")
 
-    # ============ 新增：检查代理并自动取消 ============
-    def check_proxy(self):
-        proxy = subprocess.getoutput("git config --global --get https.proxy")
-        if proxy and proxy.startswith("http://127.0.0.1:58464"):
-            host, port = proxy.replace("http://", "").split(":")
-            self.log(f"检测到本地代理: {proxy}，检查端口是否可用...")
-            if not self.test_port(host, int(port)):
-                self.log("代理端口不可用，自动取消代理设置")
-                self.run_git_command("git config --global --unset http.proxy")
-                self.run_git_command("git config --global --unset https.proxy")
-        else:
-            self.log("未检测到本地代理或代理正常")
+    def check_repo_mode(self):
+        """检查是否使用 SSH，如果是 HTTPS 就切换"""
+        remote_url = self.run_command("git remote get-url origin").strip()
+        if remote_url.startswith("https://"):
+            self.append_output(f"检测到远程仓库为 {remote_url}，切换为 SSH...")
+            ssh_url = remote_url.replace("https://github.com/", "git@github.com:")
+            self.run_command(f"git remote set-url origin {ssh_url}")
+            self.append_output(f"已切换到 SSH: {ssh_url}")
 
-    def test_port(self, host, port):
-        try:
-            with socket.create_connection((host, port), timeout=2):
-                return True
-        except Exception:
-            return False
+    def handle_local_changes(self):
+        """检测并处理本地未提交的改动"""
+        status = self.run_command("git status --porcelain").strip()
+        if status:  # 有改动
+            choice = messagebox.askquestion(
+                "检测到未提交改动",
+                "检测到本地有未提交的修改。\n\n是否要处理？\n\n"
+                "是 = 选择操作方式\n"
+                "否 = 取消 Pull 操作"
+            )
+            if choice == "no":
+                return False
 
-    # ============ 新增：自动提交未暂存修改 ============
-    def commit_unstaged_changes(self):
-        status = subprocess.getoutput("git status --porcelain")
-        if status.strip():
-            self.log("检测到未暂存的更改，自动提交...")
-            self.run_git_command("git add .")
-            self.run_git_command('git commit -m "auto-commit before pull"')
-        else:
-            self.log("没有未暂存的更改")
+            action = simpledialog.askstring(
+                "选择操作",
+                "请输入操作方式：\n"
+                "1 = 提交改动\n"
+                "2 = 暂存改动\n"
+                "3 = 丢弃改动\n"
+                "其他 = 取消"
+            )
 
-    def do_git_ops(self):
-        files_to_add = [f for f, var in self.file_vars.items() if var.get()]
-        if not files_to_add:
-            messagebox.showerror("错误", "请至少选择一个文件进行更新！")
+            if action == "1":
+                msg = simpledialog.askstring("提交信息", "请输入提交信息：", initialvalue="本地修改")
+                self.append_output("提交改动中...")
+                self.run_command("git add .")
+                self.run_command(f'git commit -m "{msg}"')
+            elif action == "2":
+                self.append_output("暂存改动中...")
+                self.run_command("git stash")
+            elif action == "3":
+                self.append_output("丢弃改动中...")
+                self.run_command("git reset --hard")
+            else:
+                self.append_output("取消操作。")
+                return False
+        return True
+
+    def update_repo(self):
+        """拉取远程最新代码"""
+        self.check_repo_mode()
+
+        if not self.handle_local_changes():
             return
 
-        commit_msg = self.entry_msg.get() or "update"
-        repo_dir = os.getcwd()
-        self.log(f"准备更新文件：{', '.join(files_to_add)}")
+        self.append_output("拉取远程最新...")
+        result = self.run_command("git pull --rebase")
+        self.append_output(result if result else "拉取完成！")
 
-        success = True
+        # 如果用 stash，需要恢复
+        if "stash" in result:
+            self.append_output("恢复暂存的改动...")
+            self.append_output(self.run_command("git stash pop"))
 
-        # 0. 检查代理
-        self.check_proxy()
+        self.append_output("---------------------")
 
-        # 0.5 自动提交未暂存修改，避免 pull 失败
-        self.commit_unstaged_changes()
+    def push_repo(self):
+        """推送本地代码"""
+        self.check_repo_mode()
 
-        # 1. 拉取远程最新，避免冲突
-        self.log("拉取远程最新...")
-        pull_ok = self.run_git_command("git pull --rebase origin main", cwd=repo_dir)
-        if not pull_ok:
-            self.log("拉取远程失败，请检查网络或冲突。")
+        self.append_output("准备推送...")
+        result = self.run_command("git push origin main")
+        self.append_output(result if result else "推送完成！")
+        self.append_output("---------------------")
 
-        # 2. 添加选中文件
-        for f in files_to_add:
-            success &= self.run_git_command(f'git add "{f}"', cwd=repo_dir)
-
-        # 3. 检查是否有实际改动
-        result = subprocess.run(
-            "git diff --cached --name-only",
-            shell=True,
-            cwd=repo_dir,
-            text=True,
-            capture_output=True
-        )
-
-        if not result.stdout.strip():
-            # 如果缓存区为空，检查是否刚刚有自动提交
-            last_commit = subprocess.getoutput("git log -1 --pretty=%B")
-            if last_commit == "auto-commit before pull":
-                self.log("检测到自动提交，执行推送...")
-                success &= self.run_git_command("git push", cwd=repo_dir)
-                if not success:
-                    self.log("尝试第一次推送，设置 upstream...")
-                    success &= self.run_git_command("git push -u origin main", cwd=repo_dir)
-            else:
-                self.log("没有新改动需要提交。")
-        else:
-            # 4. 提交改动
-            success &= self.run_git_command(f'git commit -m "{commit_msg}"', cwd=repo_dir)
-
-            # 5. 推送到远程
-            push_success = self.run_git_command("git push", cwd=repo_dir)
-            if not push_success:
-                self.log("尝试第一次推送，设置 upstream...")
-                push_success = self.run_git_command("git push -u origin main", cwd=repo_dir)
-            success &= push_success
-
-        if success:
-            self.log("更新完成！\n---------------------")
-            messagebox.showinfo("完成", "更新完成！")
-            self.refresh_file_list()
-        else:
-            self.log("操作失败，请查看日志")
-            messagebox.showerror("失败", "操作过程中出错，请查看日志。")
 
 if __name__ == "__main__":
     root = tk.Tk()
