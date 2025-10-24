@@ -898,6 +898,13 @@ def process_data(dfA, dfB):
     return dfA
 
  # ========== 就业质量报告图片提取 ==========
+import os
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+from PIL import Image
+import io
+
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     image_paths = []
@@ -911,11 +918,26 @@ def fetch_images_static(url, output_folder):
             if not src:
                 continue
             full_url = urljoin(url, src)
+            # 跳过 base64 或 blob 类型
+            if full_url.startswith("data:") or full_url.startswith("blob:"):
+                continue
             ext = os.path.splitext(urlparse(full_url).path)[1] or ".jpg"
             filename = f"img_{idx:03d}{ext}"
             path = os.path.join(output_folder, filename)
             try:
-                img_data = requests.get(full_url, timeout=10).content
+                img_resp = requests.get(full_url, timeout=10)
+                if img_resp.status_code != 200:
+                    continue
+                content_type = img_resp.headers.get("content-type", "")
+                # 仅保存真正的图片类型
+                if not content_type.startswith("image/"):
+                    continue
+                img_data = img_resp.content
+                # 验证图片是否可识别
+                try:
+                    Image.open(io.BytesIO(img_data))
+                except Exception:
+                    continue
                 with open(path, "wb") as f:
                     f.write(img_data)
                 image_paths.append(path)
@@ -924,6 +946,7 @@ def fetch_images_static(url, output_folder):
     except Exception as e:
         raise Exception(f"静态模式加载失败: {e}")
     return image_paths
+
 
 def images_to_pdf(image_paths, pdf_path):
     images = []
@@ -937,6 +960,7 @@ def images_to_pdf(image_paths, pdf_path):
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
         return True
     return False
+
 
 
 
