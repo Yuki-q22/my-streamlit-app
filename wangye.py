@@ -866,39 +866,61 @@ def fuzzy_match(row, b_dict):
 
 
 def process_data(dfA, dfB):
-    # B 表字段重命名
+    # 确保导入所需库
+
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # =========================
-    # 1. 构建组合键（不含备注）
-    # =========================
-    key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
+    duplicate_check_fields = [
+        "学校名称",
+        "省份",
+        "一级层次",
+        "招生科类",
+        "招生批次",
+        "招生类型（选填）",
+        "招生专业"
+    ]
 
-    dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(
-        lambda x: "|".join(str(i).strip() for i in x),
-        axis=1
-    )
+    dfA_has_dup = has_duplicate_records(dfA, duplicate_check_fields)
+    dfB_has_dup = has_duplicate_records(dfB, duplicate_check_fields)
 
-    dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(
-        lambda x: "|".join(str(i).strip() for i in x),
-        axis=1
-    )
-
-    # =========================
-    # 2. 基于【组合键】做重复校验（关键修正）
-    # =========================
-    if dfA["组合键"].duplicated().any() or dfB["组合键"].duplicated().any():
+    # 只要任意一个表存在重复，直接禁止匹配
+    if dfA_has_dup or dfB_has_dup:
         dfA["专业组代码"] = None
         return dfA
 
-    # =========================
-    # 3. 精确匹配（不再使用任何相似度逻辑）
-    # =========================
-    b_map = dfB.set_index("组合键")["专业组代码"].to_dict()
+    # 清洗备注字段（使用优化后的清洗函数）
+    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
+    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
 
-    dfA["专业组代码"] = dfA["组合键"].map(b_map)
+    # 构建组合键（不含备注）
+    key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
+    dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join([str(i).strip() for i in x]), axis=1)
+    dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(
+        lambda x: "|".join([str(i).strip() for i in x]), axis=1)
+
+    # 构建B表字典：组合键 → 记录列表
+    b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
+
+    def get_code(row):
+        key = row["组合键"]
+        candidates = b_dict.get(key, [])
+
+        # 情况1：无候选记录
+        if not candidates:
+            return None
+
+        # 情况2：唯一候选记录
+        if len(candidates) == 1:
+            return candidates[0]["专业组代码"]
+
+        # 情况3：多个候选记录，使用模糊匹配
+        return fuzzy_match(row, b_dict)
+
+    dfA["专业组代码"] = dfA.apply(get_code, axis=1)
 
     return dfA
+
  # ========== 就业质量报告图片提取 ==========
 import os
 import requests
