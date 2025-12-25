@@ -805,12 +805,6 @@ def clean_remark(text):
 
     return cleaned
 
-def has_duplicate_records(df, key_cols):
-    """
-    判断 DataFrame 在指定字段组合上是否存在重复记录
-    """
-    return df.duplicated(subset=key_cols).any()
-
 
 def fuzzy_match(row, b_dict):
     key = row["组合键"]
@@ -870,24 +864,6 @@ def process_data(dfA, dfB):
 
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    duplicate_check_fields = [
-        "学校名称",
-        "省份",
-        "一级层次",
-        "招生科类",
-        "招生批次",
-        "招生类型（选填）",
-        "招生专业"
-    ]
-
-    dfA_has_dup = has_duplicate_records(dfA, duplicate_check_fields)
-    dfB_has_dup = has_duplicate_records(dfB, duplicate_check_fields)
-
-    # 只要任意一个表存在重复，直接禁止匹配
-    if dfA_has_dup or dfB_has_dup:
-        dfA["专业组代码"] = None
-        return dfA
-
     # 清洗备注字段（使用优化后的清洗函数）
     dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
     dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
@@ -920,6 +896,7 @@ def process_data(dfA, dfB):
     dfA["专业组代码"] = dfA.apply(get_code, axis=1)
 
     return dfA
+
 
  # ========== 就业质量报告图片提取 ==========
 import os
