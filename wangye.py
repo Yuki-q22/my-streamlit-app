@@ -766,8 +766,6 @@ def process_segmentation_file(file_path):
 # ============================
 # 专业组代码匹配
 # ============================
-# 匹配参数
-SIMILARITY_THRESHOLD = 0.5
 
 tableA_fields = [
     "学校名称", "省份", "招生专业", "专业备注（选填）",
@@ -786,89 +784,10 @@ rename_mapping_B = {
 }
 
 
-def clean_remark(text):
-    """更彻底的备注清洗函数"""
-    if pd.isna(text):
-        return ""
-
-    # 统一转换为小写并去除首尾空格
-    cleaned = str(text).strip().lower()
-
-    # 移除括号及其内容（保留括号内的文本）
-    cleaned = re.sub(r'[()（）]', '', cleaned)
-
-    # 移除常见分隔符（保留分隔符之间的文本）
-    cleaned = re.sub(r'[;；、,:：]', ' ', cleaned)
-
-    # 合并多余空格
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-
-    return cleaned
-
-
-def fuzzy_match(row, b_dict):
-    key = row["组合键"]
-    candidates = b_dict.get(key, [])
-    if not candidates:
-        return None
-
-    remark_a = row["专业备注（选填）_清洗"]
-    best_match = None
-    max_similarity = 0
-
-    # 特殊处理空备注情况
-    if not remark_a:
-        # 如果A备注为空，优先选择B备注也为空的记录
-        empty_remarks = [c for c in candidates if not c["专业备注（选填）_清洗"]]
-        if empty_remarks:
-            return empty_remarks[0]["专业组代码"]
-        # 如果没有完全空白的备注，则选择第一个（或根据其他逻辑）
-        return candidates[0]["专业组代码"]
-
-    for candidate in candidates:
-        remark_b = candidate["专业备注（选填）_清洗"]
-
-        # 1. 优先判断核心关键词匹配
-        # 提取A备注中的关键词（按空格分割）
-        keywords_a = set(remark_a.split())
-
-        # 检查A的所有关键词是否都出现在B备注中
-        if keywords_a and all(kw in remark_b for kw in keywords_a):
-            return candidate["专业组代码"]
-
-        # 2. 部分包含关系（子串匹配）
-        if remark_a in remark_b:
-            return candidate["专业组代码"]
-
-        # 3. 相似度匹配（使用集合相似度，更高效）
-        set_a = set(remark_a.split())
-        set_b = set(remark_b.split())
-
-        if not set_a or not set_b:
-            similarity = 0
-        else:
-            # 使用Jaccard相似度
-            intersection = len(set_a & set_b)
-            union = len(set_a | set_b)
-            similarity = intersection / union if union > 0 else 0
-
-        if similarity > max_similarity and similarity >= SIMILARITY_THRESHOLD:
-            max_similarity = similarity
-            best_match = candidate
-
-    return best_match["专业组代码"] if best_match else None
-
-
 def process_data(dfA, dfB):
-    # 确保导入所需库
-
     dfB.rename(columns=rename_mapping_B, inplace=True)
 
-    # 清洗备注字段（使用优化后的清洗函数）
-    dfA["专业备注（选填）_清洗"] = dfA["专业备注（选填）"].apply(clean_remark)
-    dfB["专业备注（选填）_清洗"] = dfB["专业备注（选填）"].apply(clean_remark)
-
-    # 构建组合键（不含备注）
+    # 构建组合键（不含备注）：学校-省份-层次-科类-批次-招生类型-专业
     key_fields = [f for f in tableA_fields if f != "专业备注（选填）"]
     dfA["组合键"] = dfA[key_fields].fillna("").astype(str).apply(
         lambda x: "|".join([str(i).strip() for i in x]), axis=1)
@@ -901,18 +820,16 @@ def process_data(dfA, dfB):
         has_duplicate_in_a = key in a_duplicate_keys
         has_duplicate_in_b = key in b_duplicate_keys
 
-        # 如果A表或B表中任何一个有重复，不能直接匹配
+        # 如果A表或B表中任何一个有重复，不能按这几个字段直接匹配，返回None
         if has_duplicate_in_a or has_duplicate_in_b:
-            # 即使B表中只有一条记录，由于A表或B表有重复，也不能直接匹配
-            # 使用模糊匹配
-            return fuzzy_match(row, b_dict)
+            return None
 
-        # 情况2：A表和B表中都没有重复，且B表中只有唯一候选记录，可以直接匹配
+        # A表和B表中都没有重复，且B表中只有唯一候选记录，可以直接匹配
         if len(candidates) == 1:
             return candidates[0]["专业组代码"]
 
-        # 情况3：多个候选记录，使用模糊匹配
-        return fuzzy_match(row, b_dict)
+        # 如果B表中有多个候选记录（这种情况理论上不应该出现，因为B表没有重复），返回None
+        return None
 
     dfA["专业组代码"] = dfA.apply(get_code, axis=1)
 
