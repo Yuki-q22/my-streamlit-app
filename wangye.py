@@ -875,6 +875,17 @@ def process_data(dfA, dfB):
     dfB["组合键"] = dfB[key_fields].fillna("").astype(str).apply(
         lambda x: "|".join([str(i).strip() for i in x]), axis=1)
 
+    # 检查A表和B表中组合键的重复性
+    # 统计A表中每个组合键出现的次数
+    a_key_counts = dfA["组合键"].value_counts()
+    # 统计B表中每个组合键出现的次数
+    b_key_counts = dfB["组合键"].value_counts()
+    
+    # 找出A表中有重复的组合键（出现次数>1）
+    a_duplicate_keys = set(a_key_counts[a_key_counts > 1].index)
+    # 找出B表中有重复的组合键（出现次数>1）
+    b_duplicate_keys = set(b_key_counts[b_key_counts > 1].index)
+
     # 构建B表字典：组合键 → 记录列表
     b_dict = dfB.groupby("组合键").apply(lambda x: x.to_dict("records")).to_dict()
 
@@ -886,7 +897,17 @@ def process_data(dfA, dfB):
         if not candidates:
             return None
 
-        # 情况2：唯一候选记录
+        # 检查该组合键在A表或B表中是否有重复
+        has_duplicate_in_a = key in a_duplicate_keys
+        has_duplicate_in_b = key in b_duplicate_keys
+
+        # 如果A表或B表中任何一个有重复，不能直接匹配
+        if has_duplicate_in_a or has_duplicate_in_b:
+            # 即使B表中只有一条记录，由于A表或B表有重复，也不能直接匹配
+            # 使用模糊匹配
+            return fuzzy_match(row, b_dict)
+
+        # 情况2：A表和B表中都没有重复，且B表中只有唯一候选记录，可以直接匹配
         if len(candidates) == 1:
             return candidates[0]["专业组代码"]
 
