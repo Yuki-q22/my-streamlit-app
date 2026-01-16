@@ -491,8 +491,8 @@ def process_score_file(file_path):
 7.首选科目：新八省必填，只能填写（历史或物理）"""
 
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            # 先写入数据（从第4行开始，因为前3行是标题和备注）
-            new_result.to_excel(writer, index=False, startrow=3)
+            # 先写入数据（不包含标题，从第4行开始）
+            new_result.to_excel(writer, index=False, header=False, startrow=3)
             workbook = writer.book
             worksheet = writer.sheets['Sheet1']
 
@@ -500,6 +500,8 @@ def process_score_file(file_path):
             worksheet.merge_cells('A1:U1')
             worksheet['A1'] = remark_text
             worksheet['A1'].alignment = Alignment(wrap_text=True, vertical='top')
+            # 设置第一行行高为215磅
+            worksheet.row_dimensions[1].height = 215
             
             # 第二行：A2="招生年"，B2=年份，C2="1"，D2="模板类型（模板标识不要更改）"
             worksheet['A2'] = '招生年'
@@ -516,8 +518,8 @@ def process_score_file(file_path):
                 worksheet.cell(row=3, column=col_idx, value=header)
 
             # 设置文本格式（从第4行开始，即数据行）
-            # 需要设置为文本格式的列（使用新列名）
-            text_format_cols = ['专业组代码', '院校招生代码', '最高分', '最低分', '最低位次', '录取人数', '招生人数']
+            # 需要设置为文本格式的列（使用新列名，不包括招生人数和录取人数）
+            text_format_cols = ['专业组代码', '院校招生代码', '最高分', '最低分', '最低位次']
             for col in text_format_cols:
                 if col in new_result.columns:
                     col_idx = new_result.columns.get_loc(col) + 1
