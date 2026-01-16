@@ -1,0 +1,2826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>招生计划数据比对与转换工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            overflow: hidden;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eaeaea;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #3498db, #2c3e50);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .workflow {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            position: relative;
+        }
+        
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px 25px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: #3498db;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .step.active .step-number {
+            background: #27ae60;
+            transform: scale(1.1);
+            box-shadow: 0 0 0 5px rgba(39, 174, 96, 0.2);
+        }
+        
+        .step.completed .step-number {
+            background: #27ae60;
+        }
+        
+        .step-text {
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            color: #2c3e50;
+        }
+        
+        .step-arrow {
+            font-size: 24px;
+            color: #95a5a6;
+            margin: 0 10px;
+        }
+        
+        .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 1200px) {
+            .upload-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .upload-box {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-box:hover {
+            border-color: #3498db;
+            background: #f0f7ff;
+        }
+        
+        .upload-box h3 {
+            color: #3498db;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 16px;
+        }
+        
+        .file-input {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            font-size: 14px;
+        }
+        
+        .file-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+            text-align: left;
+            font-size: 13px;
+            color: #666;
+            min-height: 60px;
+        }
+        
+        .field-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #666;
+            border-left: 4px solid #3498db;
+        }
+        
+        .match-fields {
+            display: inline-block;
+            background: #e3f2fd;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-size: 13px;
+        }
+        
+        .match-fields.info {
+            background: #d1ecf1;
+        }
+        
+        .control-section {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            min-width: 140px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #27ae60, #219a52);
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+        
+        .btn-purple {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        }
+        
+        .result-section {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .result-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eaeaea;
+            overflow-x: auto;
+        }
+        
+        .tab-btn {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            font-size: 16px;
+            font-weight: 500;
+            color: #7f8c8d;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        
+        .tab-btn:hover {
+            color: #3498db;
+        }
+        
+        .tab-btn.active {
+            color: #3498db;
+        }
+        
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #3498db;
+            border-radius: 2px 2px 0 0;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 18px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+            border-top: 4px solid #3498db;
+        }
+        
+        .stat-card.success {
+            border-color: #27ae60;
+        }
+        
+        .stat-card.warning {
+            border-color: #f39c12;
+        }
+        
+        .stat-card.info {
+            border-color: #17a2b8;
+        }
+        
+        .stat-card.danger {
+            border-color: #e74c3c;
+        }
+        
+        .stat-card.purple {
+            border-color: #9b59b6;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 8px 0;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 13px;
+        }
+        
+        .filter-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        
+        .filter-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .filter-label {
+            font-weight: 500;
+            color: #495057;
+            white-space: nowrap;
+            min-width: 60px;
+        }
+        
+        .filter-input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            font-size: 14px;
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .filter-select {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            font-size: 14px;
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .filter-btn {
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .filter-btn:hover {
+            background: #2980b9;
+        }
+        
+        .filter-btn.secondary {
+            background: #6c757d;
+        }
+        
+        .filter-btn.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .filter-btn.apply-all {
+            background: #27ae60;
+        }
+        
+        .filter-btn.apply-all:hover {
+            background: #219a52;
+        }
+        
+        .current-filter {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e7f3ff;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #0066cc;
+            display: none;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 14px 12px;
+            text-align: left;
+            font-weight: 500;
+            font-size: 14px;
+            position: sticky;
+            top: 0;
+        }
+        
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .status-exists {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .status-not-exists {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .conversion-section {
+            margin-top: 40px;
+            padding: 25px;
+            background: #f0f8ff;
+            border-radius: 10px;
+            border: 2px solid #e3f2fd;
+            display: none;
+        }
+        
+        .conversion-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .conversion-action {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .instructions {
+            background-color: #f0f7ff;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #95a5a6;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 768px) {
+            .upload-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats, .conversion-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            table {
+                display: block;
+                overflow-x: auto;
+            }
+            
+            .control-section {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            .filter-controls {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .filter-group {
+                width: 100%;
+            }
+            
+            .workflow {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .step-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 招生计划数据比对与转换工具</h1>
+            <p class="subtitle">上传招生计划、专业分和院校分文件进行比对，导出未匹配数据为专业分格式</p>
+        </header>
+        
+        <div class="workflow">
+            <div class="step active" id="step1">
+                <div class="step-number">1</div>
+                <div class="step-text">上传文件</div>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div class="step-text">数据比对</div>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div class="step-text">导出未匹配数据</div>
+            </div>
+        </div>
+        
+        <div class="field-info">
+            <div style="margin-bottom: 10px;">
+                <strong>比对1（招生计划 vs 专业分）：</strong><br>
+                <span style="color: #666; font-size: 13px;">检查招生计划的记录是否在专业分中存在</span><br>
+                <span class="match-fields">年份</span>
+                <span class="match-fields">省份</span>
+                <span class="match-fields">学校</span>
+                <span class="match-fields">科类</span>
+                <span class="match-fields">批次</span>
+                <span class="match-fields">专业</span>
+                <span class="match-fields">层次</span>
+            </div>
+            <div>
+                <strong>比对2（招生计划 vs 院校分）：</strong><br>
+                <span style="color: #666; font-size: 13px;">检查招生计划的记录是否在院校分中存在</span><br>
+                <span class="match-fields info">年份</span>
+                <span class="match-fields info">省份</span>
+                <span class="match-fields info">学校</span>
+                <span class="match-fields info">科类</span>
+                <span class="match-fields info">批次</span>
+            </div>
+        </div>
+        
+        <div class="upload-section">
+            <div class="upload-box">
+                <h3>📋 招生计划文件</h3>
+                <p>包含招生计划信息的Excel文件</p>
+                <input type="file" id="planFile" class="file-input" accept=".xlsx, .xls">
+                <div class="file-info" id="planInfo">等待上传文件...</div>
+            </div>
+            
+            <div class="upload-box">
+                <h3>📊 专业分文件</h3>
+                <p>包含专业分信息的Excel文件</p>
+                <input type="file" id="scoreFile" class="file-input" accept=".xlsx, .xls">
+                <div class="file-info" id="scoreInfo">等待上传文件...</div>
+            </div>
+            
+            <div class="upload-box">
+                <h3>🏫 院校分文件</h3>
+                <p>包含院校分信息的Excel文件</p>
+                <input type="file" id="collegeFile" class="file-input" accept=".xlsx, .xls">
+                <div class="file-info" id="collegeInfo">等待上传文件...</div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <strong>📝 说明：</strong> 上传招生计划、专业分和院校分三个Excel文件，先进行数据比对，然后可以将未匹配的招生计划数据转换为专业分格式导出。
+        </div>
+        
+        <div class="control-section">
+            <button class="btn" onclick="comparePlanVsScore()">比对1：招生计划 vs 专业分</button>
+            <button class="btn btn-info" onclick="comparePlanVsCollege()">比对2：招生计划 vs 院校分</button>
+            <button class="btn btn-success" onclick="compareAll()" id="allCompareBtn">全部比对</button>
+            <button class="btn btn-purple" onclick="exportAllResults()" id="exportAllBtn" style="display:none;">📊 导出全部结果</button>
+            <button class="btn btn-secondary" onclick="resetAll()">重置</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p id="loadingText">正在处理数据，请稍候...</p>
+        </div>
+        
+        <div class="result-section" id="resultSection">
+            <div class="result-tabs">
+                <button class="tab-btn active" onclick="switchTab('planScoreTab')">比对1：招生计划 vs 专业分</button>
+                <button class="tab-btn" onclick="switchTab('planCollegeTab')">比对2：招生计划 vs 院校分</button>
+            </div>
+            
+            <!-- 比对1结果 -->
+            <div id="planScoreTab" class="tab-content active">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">招生计划总记录数</div>
+                        <div class="stat-value" id="planScoreTotal">0</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">匹配记录数</div>
+                        <div class="stat-value" id="planScoreMatched">0</div>
+                    </div>
+                    <div class="stat-card danger">
+                        <div class="stat-label">未匹配记录数</div>
+                        <div class="stat-value" id="planScoreUnmatched">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">匹配率</div>
+                        <div class="stat-value" id="planScoreRate">0%</div>
+                    </div>
+                </div>
+                
+                <!-- 比对1筛选控件 -->
+                <div class="filter-controls" id="planScoreFilters">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <span class="filter-label">省份:</span>
+                            <input type="text" class="filter-input" id="planScoreProvinceFilter" list="planScoreProvinceList" placeholder="输入或选择省份">
+                            <datalist id="planScoreProvinceList">
+                                <option value="全部省份">
+                            </datalist>
+                        </div>
+                        <div class="filter-group">
+                            <span class="filter-label">批次:</span>
+                            <input type="text" class="filter-input" id="planScoreBatchFilter" list="planScoreBatchList" placeholder="输入或选择批次">
+                            <datalist id="planScoreBatchList">
+                                <option value="全部批次">
+                            </datalist>
+                        </div>
+                        <div class="filter-group">
+                            <span class="filter-label">匹配状态:</span>
+                            <select class="filter-select" id="planScoreMatchStatusFilter">
+                                <option value="all">全部状态</option>
+                                <option value="matched">匹配</option>
+                                <option value="unmatched">未匹配</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <span class="filter-label">显示选项:</span>
+                            <select class="filter-select" id="planScoreDisplayOption">
+                                <option value="all">显示全部记录</option>
+                                <option value="100">仅显示前100条</option>
+                                <option value="500">仅显示前500条</option>
+                            </select>
+                        </div>
+                        <div class="filter-group" style="justify-content: flex-end; gap: 10px;">
+                            <button class="filter-btn apply-all" onclick="applyPlanScoreFilter()">应用筛选</button>
+                            <button class="filter-btn secondary" onclick="resetPlanScoreFilter()">重置筛选</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="planScoreCurrentFilter" class="current-filter"></div>
+                
+                <div id="planScoreResultsTable"></div>
+                <div style="text-align:center; margin-top:20px;">
+                    <button class="btn btn-success" onclick="exportPlanScoreResults()" id="exportPlanScoreBtn" style="display:none;">导出比对1结果</button>
+                    <button class="btn btn-warning" onclick="exportUnmatchedPlanScoreAsScore()" id="exportUnmatchedPlanScoreBtn" style="display:none;">导出未匹配数据为专业分格式</button>
+                </div>
+            </div>
+            
+            <!-- 比对2结果 -->
+            <div id="planCollegeTab" class="tab-content">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">招生计划总记录数</div>
+                        <div class="stat-value" id="planCollegeTotal">0</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">匹配记录数</div>
+                        <div class="stat-value" id="planCollegeMatched">0</div>
+                    </div>
+                    <div class="stat-card danger">
+                        <div class="stat-label">未匹配记录数</div>
+                        <div class="stat-value" id="planCollegeUnmatched">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">匹配率</div>
+                        <div class="stat-value" id="planCollegeRate">0%</div>
+                    </div>
+                </div>
+                
+                <!-- 比对2筛选控件 -->
+                <div class="filter-controls" id="planCollegeFilters">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <span class="filter-label">省份:</span>
+                            <input type="text" class="filter-input" id="planCollegeProvinceFilter" list="planCollegeProvinceList" placeholder="输入或选择省份">
+                            <datalist id="planCollegeProvinceList">
+                                <option value="全部省份">
+                            </datalist>
+                        </div>
+                        <div class="filter-group">
+                            <span class="filter-label">批次:</span>
+                            <input type="text" class="filter-input" id="planCollegeBatchFilter" list="planCollegeBatchList" placeholder="输入或选择批次">
+                            <datalist id="planCollegeBatchList">
+                                <option value="全部批次">
+                            </datalist>
+                        </div>
+                        <div class="filter-group">
+                            <span class="filter-label">匹配状态:</span>
+                            <select class="filter-select" id="planCollegeMatchStatusFilter">
+                                <option value="all">全部状态</option>
+                                <option value="matched">匹配</option>
+                                <option value="unmatched">未匹配</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <span class="filter-label">显示选项:</span>
+                            <select class="filter-select" id="planCollegeDisplayOption">
+                                <option value="all">显示全部记录</option>
+                                <option value="100">仅显示前100条</option>
+                                <option value="500">仅显示前500条</option>
+                            </select>
+                        </div>
+                        <div class="filter-group" style="justify-content: flex-end; gap: 10px;">
+                            <button class="filter-btn apply-all" onclick="applyPlanCollegeFilter()">应用筛选</button>
+                            <button class="filter-btn secondary" onclick="resetPlanCollegeFilter()">重置筛选</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="planCollegeCurrentFilter" class="current-filter"></div>
+                
+                <div id="planCollegeResultsTable"></div>
+                <div style="text-align:center; margin-top:20px;">
+                    <button class="btn btn-success" onclick="exportPlanCollegeResults()" id="exportPlanCollegeBtn" style="display:none;">导出比对2结果</button>
+                    <button class="btn btn-warning" onclick="exportUnmatchedPlanCollegeAsScore()" id="exportUnmatchedPlanCollegeBtn" style="display:none;">导出未匹配数据为专业分格式</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="conversion-section" id="conversionSection">
+            <h3 style="color: #2c3e50; margin-bottom: 20px; text-align: center;">🎯 未匹配数据转换</h3>
+            
+            <div class="conversion-stats">
+                <div class="stat-card">
+                    <div class="stat-label">待转换记录数</div>
+                    <div class="stat-value" id="conversionTotal">0</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-label">转换类型</div>
+                    <div class="stat-value" id="conversionType">-</div>
+                </div>
+                <div class="stat-card info">
+                    <div class="stat-label">年份</div>
+                    <div class="stat-value" id="conversionYear">-</div>
+                </div>
+                <div class="stat-card purple">
+                    <div class="stat-label">省份数量</div>
+                    <div class="stat-value" id="conversionProvinceCount">0</div>
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <strong>转换说明：</strong> 将未匹配的招生计划数据转换为专业分导入模板格式，包括字段映射、选科要求转换、代码格式处理等。
+                <br><strong>特别处理：</strong> 当"专业组选科要求"包含"必选"时，转换为"单科、多科均需选考"，次选科目填入必选科目的第一个字。
+            </div>
+            
+            <div class="conversion-action">
+                <button class="btn btn-success" onclick="convertAndExportUnmatchedData()" id="convertAndExportBtn">
+                    🔄 转换并导出为专业分格式
+                </button>
+                <button class="btn btn-secondary" onclick="previewConversion()" id="previewBtn">
+                    👁️ 预览转换结果
+                </button>
+            </div>
+            
+            <div id="conversionPreview" style="display: none; margin-top: 20px;"></div>
+        </div>
+        
+        <footer>
+            <p>© 2024 招生计划数据比对与转换工具 | 基于 SheetJS (xlsx.js) 构建 | 所有数据处理均在浏览器本地完成</p>
+        </footer>
+    </div>
+
+    <!-- SheetJS库 -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- FileSaver.js库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
+    <script>
+        // 全局变量
+        let planData = [];
+        let scoreData = [];
+        let collegeData = [];
+        let planScoreResults = [];
+        let planCollegeResults = [];
+        let isComparing = false;
+        let conversionData = []; // 待转换的未匹配数据
+        let convertedData = []; // 转换后的数据
+        let conversionSource = ''; // 转换来源：planScore或planCollege
+        
+        // 筛选状态变量
+        let planScoreFilterState = {
+            province: 'all',
+            batch: 'all',
+            matchStatus: 'all',
+            displayOption: 'all'
+        };
+        
+        let planCollegeFilterState = {
+            province: 'all',
+            batch: 'all',
+            matchStatus: 'all',
+            displayOption: 'all'
+        };
+        
+        // 文件上传事件监听
+        document.getElementById('planFile').addEventListener('change', function(e) {
+            resetComparisonResults();
+            loadFile(e.target.files[0], 'plan');
+        });
+        
+        document.getElementById('scoreFile').addEventListener('change', function(e) {
+            resetComparisonResults();
+            loadFile(e.target.files[0], 'score');
+        });
+        
+        document.getElementById('collegeFile').addEventListener('change', function(e) {
+            resetComparisonResults();
+            loadFile(e.target.files[0], 'college');
+        });
+        
+        // 重置比对结果和状态
+        function resetComparisonResults() {
+            planScoreResults = [];
+            planCollegeResults = [];
+            conversionData = [];
+            convertedData = [];
+            conversionSource = '';
+            
+            planScoreFilterState = {
+                province: 'all',
+                batch: 'all',
+                matchStatus: 'all',
+                displayOption: 'all'
+            };
+            
+            planCollegeFilterState = {
+                province: 'all',
+                batch: 'all',
+                matchStatus: 'all',
+                displayOption: 'all'
+            };
+            
+            // 重置筛选控件
+            document.getElementById('planScoreProvinceFilter').value = '';
+            document.getElementById('planScoreBatchFilter').value = '';
+            document.getElementById('planScoreMatchStatusFilter').value = 'all';
+            document.getElementById('planScoreDisplayOption').value = 'all';
+            
+            document.getElementById('planCollegeProvinceFilter').value = '';
+            document.getElementById('planCollegeBatchFilter').value = '';
+            document.getElementById('planCollegeMatchStatusFilter').value = 'all';
+            document.getElementById('planCollegeDisplayOption').value = 'all';
+            
+            // 清空数据列表
+            document.getElementById('planScoreProvinceList').innerHTML = '<option value="全部省份">';
+            document.getElementById('planScoreBatchList').innerHTML = '<option value="全部批次">';
+            document.getElementById('planCollegeProvinceList').innerHTML = '<option value="全部省份">';
+            document.getElementById('planCollegeBatchList').innerHTML = '<option value="全部批次">';
+            
+            // 清空结果表格
+            document.getElementById('planScoreResultsTable').innerHTML = '';
+            document.getElementById('planCollegeResultsTable').innerHTML = '';
+            
+            // 隐藏当前筛选显示
+            document.getElementById('planScoreCurrentFilter').style.display = 'none';
+            document.getElementById('planCollegeCurrentFilter').style.display = 'none';
+            
+            // 重置统计信息
+            document.getElementById('planScoreTotal').textContent = '0';
+            document.getElementById('planScoreMatched').textContent = '0';
+            document.getElementById('planScoreUnmatched').textContent = '0';
+            document.getElementById('planScoreRate').textContent = '0%';
+            
+            document.getElementById('planCollegeTotal').textContent = '0';
+            document.getElementById('planCollegeMatched').textContent = '0';
+            document.getElementById('planCollegeUnmatched').textContent = '0';
+            document.getElementById('planCollegeRate').textContent = '0%';
+            
+            // 隐藏导出按钮
+            document.getElementById('exportPlanScoreBtn').style.display = 'none';
+            document.getElementById('exportPlanCollegeBtn').style.display = 'none';
+            document.getElementById('exportAllBtn').style.display = 'none';
+            document.getElementById('exportUnmatchedPlanScoreBtn').style.display = 'none';
+            document.getElementById('exportUnmatchedPlanCollegeBtn').style.display = 'none';
+            
+            // 隐藏转换区域
+            document.getElementById('conversionSection').style.display = 'none';
+            document.getElementById('conversionPreview').style.display = 'none';
+            
+            // 重置步骤
+            updateWorkflowStep(1);
+            
+            isComparing = false;
+        }
+        
+        // 更新工作流步骤
+        function updateWorkflowStep(step) {
+            // 重置所有步骤
+            document.getElementById('step1').classList.remove('completed', 'active');
+            document.getElementById('step2').classList.remove('completed', 'active');
+            document.getElementById('step3').classList.remove('completed', 'active');
+            
+            // 设置当前步骤
+            if (step >= 1) {
+                document.getElementById('step1').classList.add('completed');
+                if (step === 1) document.getElementById('step1').classList.add('active');
+            }
+            if (step >= 2) {
+                document.getElementById('step2').classList.add('completed');
+                if (step === 2) document.getElementById('step2').classList.add('active');
+            }
+            if (step >= 3) {
+                document.getElementById('step3').classList.add('completed');
+                if (step === 3) document.getElementById('step3').classList.add('active');
+            }
+        }
+        
+        // 加载Excel文件
+        function loadFile(file, type) {
+            if (!file) return;
+            
+            const infoDiv = document.getElementById(type + 'Info');
+            infoDiv.innerHTML = `<span style="color:#3498db">正在读取文件...</span>`;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    
+                    // 获取第一个工作表
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    
+                    // 转换为JSON
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+                    
+                    if (type === 'plan') {
+                        planData = jsonData;
+                    } else if (type === 'score') {
+                        scoreData = jsonData;
+                    } else if (type === 'college') {
+                        collegeData = jsonData;
+                    }
+                    
+                    infoDiv.innerHTML = `
+                        <strong>✓ 文件加载成功</strong><br>
+                        文件名: ${file.name}<br>
+                        记录数: ${jsonData.length} 条<br>
+                        加载时间: ${new Date().toLocaleTimeString()}
+                    `;
+                    
+                    console.log(`${type}数据加载成功:`, jsonData.length, '条记录');
+                    
+                    // 检查是否可以启用"全部比对"按钮
+                    checkAllFilesLoaded();
+                    
+                } catch (error) {
+                    infoDiv.innerHTML = `<span style="color:#e74c3c">❌ 文件读取失败: ${error.message}</span>`;
+                    console.error('文件读取错误:', error);
+                }
+            };
+            
+            reader.onerror = function() {
+                infoDiv.innerHTML = `<span style="color:#e74c3c">❌ 文件读取失败</span>`;
+            };
+            
+            reader.readAsBinaryString(file);
+        }
+        
+        // 检查所有文件是否已加载
+        function checkAllFilesLoaded() {
+            const allCompareBtn = document.getElementById('allCompareBtn');
+            const fileCount = (planData.length > 0 ? 1 : 0) + 
+                             (scoreData.length > 0 ? 1 : 0) + 
+                             (collegeData.length > 0 ? 1 : 0);
+            if (fileCount >= 2) {
+                allCompareBtn.disabled = false;
+                allCompareBtn.style.opacity = '1';
+            } else {
+                allCompareBtn.disabled = true;
+                allCompareBtn.style.opacity = '0.5';
+            }
+        }
+        
+        // 生成招生计划 vs 专业分的组合键
+        function generatePlanScoreKey(item) {
+            const year = String(item['年份'] || '').trim();
+            const province = String(item['省份'] || '').trim();
+            const school = String(item['学校'] || '').trim();
+            const subject = String(item['科类'] || '').trim();
+            const batch = String(item['批次'] || '').trim();
+            const major = String(item['专业'] || '').trim();
+            const level = String(item['层次'] || '').trim();
+            
+            return `${year}|${province}|${school}|${subject}|${batch}|${major}|${level}`;
+        }
+        
+        // 生成招生计划 vs 院校分的组合键
+        function generatePlanCollegeKey(item) {
+            const year = String(item['年份'] || '').trim();
+            const province = String(item['省份'] || '').trim();
+            const school = String(item['学校'] || '').trim();
+            const subject = String(item['科类'] || '').trim();
+            const batch = String(item['批次'] || '').trim();
+            
+            return `${year}|${province}|${school}|${subject}|${batch}`;
+        }
+        
+        // 比对1：招生计划 vs 专业分
+        function comparePlanVsScore() {
+            if (isComparing) {
+                alert('正在进行比对，请稍候...');
+                return;
+            }
+            
+            if (planData.length === 0) {
+                alert('请先上传招生计划文件');
+                return;
+            }
+            
+            if (scoreData.length === 0) {
+                alert('请先上传专业分文件');
+                return;
+            }
+            
+            isComparing = true;
+            startLoading('正在比对招生计划与专业分数据...');
+            
+            setTimeout(() => {
+                try {
+                    planScoreResults = [];
+                    const scoreKeySet = new Set();
+                    
+                    // 为专业分数据建立索引
+                    scoreData.forEach(item => {
+                        const key = generatePlanScoreKey(item);
+                        scoreKeySet.add(key);
+                    });
+                    
+                    console.log('专业分键数量:', scoreKeySet.size);
+                    
+                    // 比对招生计划数据
+                    planData.forEach((item, index) => {
+                        const key = generatePlanScoreKey(item);
+                        const exists = scoreKeySet.has(key);
+                        
+                        planScoreResults.push({
+                            index: index + 1,
+                            originalIndex: index, // 保存原始索引
+                            keyFields: {
+                                年份: item['年份'] || '',
+                                省份: item['省份'] || '',
+                                学校: item['学校'] || '',
+                                科类: item['科类'] || '',
+                                批次: item['批次'] || '',
+                                专业: item['专业'] || '',
+                                层次: item['层次'] || ''
+                            },
+                            exists: exists,
+                            otherInfo: {
+                                招生人数: item['招生人数'] || '',
+                                学费: item['学费'] || '',
+                                学制: item['学制'] || '',
+                                专业代码: item['专业代码'] || '',
+                                专业组代码: item['专业组代码'] || '',
+                                招生代码: item['招生代码'] || '',
+                                数据来源: item['数据来源'] || '',
+                                备注: item['备注'] || '',
+                                招生类型: item['招生类型'] || '',
+                                专业组选科要求: item['专业组选科要求'] || '',
+                                专业选科要求: item['专业选科要求(新高考专业省份)'] || ''
+                            }
+                        });
+                    });
+                    
+                    // 更新统计信息
+                    updatePlanScoreStats();
+                    
+                    // 初始化筛选下拉框
+                    initPlanScoreFilters();
+                    
+                    // 显示结果表格
+                    displayPlanScoreResults();
+                    
+                    // 显示导出按钮
+                    document.getElementById('exportPlanScoreBtn').style.display = 'inline-block';
+                    document.getElementById('exportUnmatchedPlanScoreBtn').style.display = 'inline-block';
+                    
+                    // 显示导出全部结果按钮
+                    checkExportAllButton();
+                    
+                    // 显示结果区域
+                    showResultSection();
+                    
+                    // 切换到比对1标签页
+                    switchTab('planScoreTab');
+                    
+                    // 更新工作流步骤
+                    updateWorkflowStep(2);
+                    
+                    stopLoading();
+                    isComparing = false;
+                    
+                    // 显示转换区域
+                    prepareConversion('planScore');
+                    
+                    alert(`比对1完成！\n总记录数: ${planData.length}\n匹配数: ${planScoreResults.filter(r => r.exists).length}\n未匹配数: ${planScoreResults.filter(r => !r.exists).length}`);
+                    
+                } catch (error) {
+                    stopLoading();
+                    isComparing = false;
+                    alert('比对过程中发生错误: ' + error.message);
+                    console.error('比对错误:', error);
+                }
+            }, 100);
+        }
+        
+        // 比对2：招生计划 vs 院校分
+        function comparePlanVsCollege() {
+            if (isComparing) {
+                alert('正在进行比对，请稍候...');
+                return;
+            }
+            
+            if (planData.length === 0) {
+                alert('请先上传招生计划文件');
+                return;
+            }
+            
+            if (collegeData.length === 0) {
+                alert('请先上传院校分文件');
+                return;
+            }
+            
+            isComparing = true;
+            startLoading('正在比对招生计划与院校分数据...');
+            
+            setTimeout(() => {
+                try {
+                    planCollegeResults = [];
+                    const collegeKeySet = new Set();
+                    
+                    // 为院校分数据建立索引
+                    collegeData.forEach(item => {
+                        const key = generatePlanCollegeKey(item);
+                        collegeKeySet.add(key);
+                    });
+                    
+                    console.log('院校分键数量:', collegeKeySet.size);
+                    
+                    // 比招生计划数据
+                    planData.forEach((item, index) => {
+                        const key = generatePlanCollegeKey(item);
+                        const exists = collegeKeySet.has(key);
+                        
+                        planCollegeResults.push({
+                            index: index + 1,
+                            originalIndex: index, // 保存原始索引
+                            keyFields: {
+                                年份: item['年份'] || '',
+                                省份: item['省份'] || '',
+                                学校: item['学校'] || '',
+                                科类: item['科类'] || '',
+                                批次: item['批次'] || ''
+                            },
+                            exists: exists,
+                            otherInfo: {
+                                专业: item['专业'] || '',
+                                层次: item['层次'] || '',
+                                招生人数: item['招生人数'] || '',
+                                学费: item['学费'] || '',
+                                学制: item['学制'] || '',
+                                专业代码: item['专业代码'] || '',
+                                专业组代码: item['专业组代码'] || '',
+                                招生代码: item['招生代码'] || '',
+                                数据来源: item['数据来源'] || '',
+                                备注: item['备注'] || '',
+                                招生类型: item['招生类型'] || '',
+                                专业组选科要求: item['专业组选科要求'] || '',
+                                专业选科要求: item['专业选科要求(新高考专业省份)'] || ''
+                            }
+                        });
+                    });
+                    
+                    // 更新统计信息
+                    updatePlanCollegeStats();
+                    
+                    // 初始化筛选下拉框
+                    initPlanCollegeFilters();
+                    
+                    // 显示结果表格
+                    displayPlanCollegeResults();
+                    
+                    // 显示导出按钮
+                    document.getElementById('exportPlanCollegeBtn').style.display = 'inline-block';
+                    document.getElementById('exportUnmatchedPlanCollegeBtn').style.display = 'inline-block';
+                    
+                    // 显示导出全部结果按钮
+                    checkExportAllButton();
+                    
+                    // 显示结果区域
+                    showResultSection();
+                    
+                    // 切换到比对2标签页
+                    switchTab('planCollegeTab');
+                    
+                    // 更新工作流步骤
+                    updateWorkflowStep(2);
+                    
+                    stopLoading();
+                    isComparing = false;
+                    
+                    // 显示转换区域
+                    prepareConversion('planCollege');
+                    
+                    alert(`比对2完成！\n总记录数: ${planData.length}\n匹配数: ${planCollegeResults.filter(r => r.exists).length}\n未匹配数: ${planCollegeResults.filter(r => !r.exists).length}`);
+                    
+                } catch (error) {
+                    stopLoading();
+                    isComparing = false;
+                    alert('比对过程中发生错误: ' + error.message);
+                    console.error('比对错误:', error);
+                }
+            }, 100);
+        }
+        
+        // 全部比对
+        function compareAll() {
+            if (isComparing) {
+                alert('正在进行比对，请稍候...');
+                return;
+            }
+            
+            let comparisonsToRun = [];
+            
+            if (planData.length > 0 && scoreData.length > 0) {
+                comparisonsToRun.push('planVsScore');
+            }
+            
+            if (planData.length > 0 && collegeData.length > 0) {
+                comparisonsToRun.push('planVsCollege');
+            }
+            
+            if (comparisonsToRun.length === 0) {
+                alert('请至少上传两个文件以进行比对');
+                return;
+            }
+            
+            isComparing = true;
+            startLoading('正在执行全部比对，请稍候...');
+            
+            let completedComparisons = 0;
+            const totalComparisons = comparisonsToRun.length;
+            
+            function onComparisonComplete() {
+                completedComparisons++;
+                console.log(`完成 ${completedComparisons}/${totalComparisons} 个比对`);
+                
+                if (completedComparisons >= totalComparisons) {
+                    setTimeout(() => {
+                        stopLoading();
+                        isComparing = false;
+                        alert('全部比对完成！');
+                        
+                        // 显示导出全部结果按钮
+                        checkExportAllButton();
+                        
+                        // 更新工作流步骤
+                        updateWorkflowStep(2);
+                        
+                        // 显示转换区域（默认使用比对1的结果）
+                        if (planScoreResults.length > 0) {
+                            prepareConversion('planScore');
+                        } else if (planCollegeResults.length > 0) {
+                            prepareConversion('planCollege');
+                        }
+                    }, 500);
+                }
+            }
+            
+            comparisonsToRun.forEach((comparison, index) => {
+                setTimeout(() => {
+                    try {
+                        switch(comparison) {
+                            case 'planVsScore':
+                                // 执行比对1
+                                planScoreResults = [];
+                                const scoreKeySet = new Set();
+                                
+                                scoreData.forEach(item => {
+                                    const key = generatePlanScoreKey(item);
+                                    scoreKeySet.add(key);
+                                });
+                                
+                                planData.forEach((item, index) => {
+                                    const key = generatePlanScoreKey(item);
+                                    const exists = scoreKeySet.has(key);
+                                    
+                                    planScoreResults.push({
+                                        index: index + 1,
+                                        originalIndex: index,
+                                        keyFields: {
+                                            年份: item['年份'] || '',
+                                            省份: item['省份'] || '',
+                                            学校: item['学校'] || '',
+                                            科类: item['科类'] || '',
+                                            批次: item['批次'] || '',
+                                            专业: item['专业'] || '',
+                                            层次: item['层次'] || ''
+                                        },
+                                        exists: exists,
+                                        otherInfo: {
+                                            招生人数: item['招生人数'] || '',
+                                            学费: item['学费'] || '',
+                                            学制: item['学制'] || '',
+                                            专业代码: item['专业代码'] || '',
+                                            专业组代码: item['专业组代码'] || '',
+                                            招生代码: item['招生代码'] || '',
+                                            数据来源: item['数据来源'] || '',
+                                            备注: item['备注'] || '',
+                                            招生类型: item['招生类型'] || '',
+                                            专业组选科要求: item['专业组选科要求'] || '',
+                                            专业选科要求: item['专业选科要求(新高考专业省份)'] || ''
+                                        }
+                                    });
+                                });
+                                
+                                updatePlanScoreStats();
+                                initPlanScoreFilters();
+                                displayPlanScoreResults();
+                                document.getElementById('exportPlanScoreBtn').style.display = 'inline-block';
+                                document.getElementById('exportUnmatchedPlanScoreBtn').style.display = 'inline-block';
+                                showResultSection();
+                                switchTab('planScoreTab');
+                                console.log('比对1完成');
+                                onComparisonComplete();
+                                break;
+                                
+                            case 'planVsCollege':
+                                // 执行比对2
+                                planCollegeResults = [];
+                                const collegeKeySet = new Set();
+                                
+                                collegeData.forEach(item => {
+                                    const key = generatePlanCollegeKey(item);
+                                    collegeKeySet.add(key);
+                                });
+                                
+                                planData.forEach((item, index) => {
+                                    const key = generatePlanCollegeKey(item);
+                                    const exists = collegeKeySet.has(key);
+                                    
+                                    planCollegeResults.push({
+                                        index: index + 1,
+                                        originalIndex: index,
+                                        keyFields: {
+                                            年份: item['年份'] || '',
+                                            省份: item['省份'] || '',
+                                            学校: item['学校'] || '',
+                                            科类: item['科类'] || '',
+                                            批次: item['批次'] || ''
+                                        },
+                                        exists: exists,
+                                        otherInfo: {
+                                            专业: item['专业'] || '',
+                                            层次: item['层次'] || '',
+                                            招生人数: item['招生人数'] || '',
+                                            学费: item['学费'] || '',
+                                            学制: item['学制'] || '',
+                                            专业代码: item['专业代码'] || '',
+                                            专业组代码: item['专业组代码'] || '',
+                                            招生代码: item['招生代码'] || '',
+                                            数据来源: item['数据来源'] || '',
+                                            备注: item['备注'] || '',
+                                            招生类型: item['招生类型'] || '',
+                                            专业组选科要求: item['专业组选科要求'] || '',
+                                            专业选科要求: item['专业选科要求(新高考专业省份)'] || ''
+                                        }
+                                    });
+                                });
+                                
+                                updatePlanCollegeStats();
+                                initPlanCollegeFilters();
+                                displayPlanCollegeResults();
+                                document.getElementById('exportPlanCollegeBtn').style.display = 'inline-block';
+                                document.getElementById('exportUnmatchedPlanCollegeBtn').style.display = 'inline-block';
+                                showResultSection();
+                                console.log('比对2完成');
+                                onComparisonComplete();
+                                break;
+                        }
+                    } catch (error) {
+                        console.error(`执行比对 ${comparison} 时发生错误:`, error);
+                        onComparisonComplete();
+                    }
+                }, index * 500);
+            });
+        }
+        
+        // 准备转换数据
+        function prepareConversion(source) {
+            conversionSource = source;
+            let unmatchedResults = [];
+            let sourceName = '';
+            
+            if (source === 'planScore') {
+                unmatchedResults = planScoreResults.filter(r => !r.exists);
+                sourceName = '招生计划 vs 专业分';
+            } else if (source === 'planCollege') {
+                unmatchedResults = planCollegeResults.filter(r => !r.exists);
+                sourceName = '招生计划 vs 院校分';
+            }
+            
+            if (unmatchedResults.length === 0) {
+                alert('没有未匹配的数据可以转换');
+                return;
+            }
+            
+            // 提取原始数据
+            conversionData = unmatchedResults.map(result => {
+                return planData[result.originalIndex];
+            });
+            
+            // 更新转换统计信息
+            updateConversionStats();
+            
+            // 显示转换区域
+            document.getElementById('conversionSection').style.display = 'block';
+            document.getElementById('conversionSection').scrollIntoView({ behavior: 'smooth' });
+            
+            // 更新工作流步骤
+            updateWorkflowStep(3);
+        }
+        
+        // 更新转换统计信息
+        function updateConversionStats() {
+            if (conversionData.length === 0) return;
+            
+            const yearSet = new Set();
+            const provinceSet = new Set();
+            
+            conversionData.forEach(item => {
+                if (item['年份']) yearSet.add(item['年份']);
+                if (item['省份']) provinceSet.add(item['省份']);
+            });
+            
+            const years = Array.from(yearSet);
+            const provinces = Array.from(provinceSet);
+            
+            document.getElementById('conversionTotal').textContent = conversionData.length;
+            document.getElementById('conversionType').textContent = conversionSource === 'planScore' ? '比对1未匹配' : '比对2未匹配';
+            document.getElementById('conversionYear').textContent = years.length > 0 ? years.join(', ') : '-';
+            document.getElementById('conversionProvinceCount').textContent = provinces.length;
+        }
+        
+        // 转换并导出未匹配数据
+        function convertAndExportUnmatchedData() {
+            if (conversionData.length === 0) {
+                alert('没有可转换的数据');
+                return;
+            }
+            
+            startLoading('正在转换数据为专业分格式...');
+            
+            setTimeout(() => {
+                try {
+                    // 转换数据
+                    convertedData = convertData(conversionData);
+                    
+                    // 导出为Excel
+                    exportConvertedDataToExcel(convertedData);
+                    
+                    stopLoading();
+                    alert(`转换完成！共转换 ${convertedData.length} 条数据`);
+                    
+                } catch (error) {
+                    stopLoading();
+                    alert('转换失败: ' + error.message);
+                    console.error('转换错误:', error);
+                }
+            }, 100);
+        }
+        
+        // 预览转换结果
+        function previewConversion() {
+            if (conversionData.length === 0) {
+                alert('没有可预览的数据');
+                return;
+            }
+            
+            startLoading('正在生成预览...');
+            
+            setTimeout(() => {
+                try {
+                    // 转换数据
+                    convertedData = convertData(conversionData);
+                    
+                    // 显示预览
+                    showConversionPreview(convertedData);
+                    
+                    stopLoading();
+                } catch (error) {
+                    stopLoading();
+                    alert('预览生成失败: ' + error.message);
+                    console.error('预览错误:', error);
+                }
+            }, 100);
+        }
+        
+        // 显示转换预览
+        function showConversionPreview(data) {
+            const previewDiv = document.getElementById('conversionPreview');
+            
+            if (!data || data.length === 0) {
+                previewDiv.innerHTML = '<p style="color:#666; text-align:center;">没有数据可预览</p>';
+                previewDiv.style.display = 'block';
+                return;
+            }
+            
+            let html = `<h4 style="margin-bottom:15px; color:#2c3e50;">转换结果预览（前10行）</h4>`;
+            html += `<div style="overflow-x:auto;">`;
+            html += `<table>`;
+            
+            // 表头
+            const headers = [
+                '学校名称', '省份', '招生专业', '一级层次', '招生科类',
+                '首选科目', '招生批次', '选科要求', '次选科目'
+            ];
+            
+            html += `<thead><tr>`;
+            headers.forEach(header => {
+                html += `<th>${header}</th>`;
+            });
+            html += `</tr></thead>`;
+            
+            // 数据行（最多显示10行）
+            html += `<tbody>`;
+            const displayCount = Math.min(data.length, 10);
+            for (let i = 0; i < displayCount; i++) {
+                const row = data[i];
+                html += `<tr>`;
+                headers.forEach(header => {
+                    const cellValue = row[header] || '';
+                    const displayValue = cellValue.length > 20 ? 
+                        cellValue.substring(0, 17) + '...' : cellValue;
+                    html += `<td title="${cellValue}">${displayValue}</td>`;
+                });
+                html += `</tr>`;
+            }
+            html += `</tbody></table>`;
+            html += `</div>`;
+            
+            if (data.length > 10) {
+                html += `<p style="text-align:center; margin-top:10px; color:#7f8c8d;">
+                    仅显示前10行数据，共 ${data.length} 行
+                </p>`;
+            }
+            
+            previewDiv.innerHTML = html;
+            previewDiv.style.display = 'block';
+        }
+        
+        // 转换数据主函数（从第二个工具复制）
+        function convertData(sourceData) {
+            const converted = [];
+            
+            sourceData.forEach((row, index) => {
+                const newRow = {};
+                
+                // 基础字段映射
+                newRow['学校名称'] = row['学校'] || '';
+                newRow['省份'] = row['省份'] || '';
+                newRow['招生专业'] = row['专业'] || '';
+                newRow['招生科类'] = row['科类'] || '';
+                newRow['招生批次'] = row['批次'] || '';
+                newRow['招生类型（选填）'] = row['招生类型'] || '';
+                newRow['专业备注（选填）'] = row['备注'] || '';
+                newRow['招生人数（选填）'] = row['招生人数'] || '';
+                newRow['数据来源'] = row['数据来源'] || '';
+                
+                // 处理层次字段
+                newRow['一级层次'] = convertLevel(row['层次']);
+                
+                // 处理代码字段（保持文本格式）
+                newRow['招生代码'] = convertToText(row['招生代码']);
+                newRow['专业代码'] = convertToText(row['专业代码']);
+                newRow['专业组代码'] = convertToText(row['专业组代码']);
+                
+                // 处理首选科目：根据招生科类的第一个字
+                newRow['首选科目'] = getFirstSubject(row['科类']);
+                
+                // 处理选科要求 - 修复版：处理"必选"情况
+                const { selectionRequirement, secondSubject } = 
+                    convertSelectionRequirement(row['专业组选科要求'], row['专业选科要求(新高考专业省份)']);
+                
+                newRow['选科要求'] = selectionRequirement;
+                newRow['次选科目'] = secondSubject;
+                
+                // 其他字段（留空）
+                newRow['专业方向（选填）'] = '';
+                newRow['最高分'] = '';
+                newRow['最低分'] = '';
+                newRow['平均分'] = '';
+                newRow['最低分位次（选填）'] = '';
+                newRow['最低分数区间低'] = '';
+                newRow['最低分数区间高'] = '';
+                newRow['最低分数区间位次低'] = '';
+                newRow['最低分数区间位次高'] = '';
+                newRow['录取人数（选填）'] = '';
+                
+                converted.push(newRow);
+            });
+            
+            return converted;
+        }
+        
+        // 获取首选科目：根据招生科类的第一个字
+        function getFirstSubject(category) {
+            if (!category) return '';
+            
+            const categoryStr = String(category);
+            
+            if (categoryStr.includes('物理类') || categoryStr.includes('物理')) {
+                return '物';
+            } else if (categoryStr.includes('历史类') || categoryStr.includes('历史')) {
+                return '历';
+            } else {
+                return '';
+            }
+        }
+        
+        // 转换层次字段
+        function convertLevel(level) {
+            if (!level) return '';
+            
+            const levelStr = String(level).toLowerCase();
+            if (levelStr.includes('专科') || levelStr.includes('高职')) {
+                return '专科(高职)';
+            } else if (levelStr.includes('本科')) {
+                return '本科(普通)';
+            }
+            
+            return level;
+        }
+        
+        // 转换选科要求 - 修复版：专门处理"必选"情况
+        function convertSelectionRequirement(groupRequirement, majorRequirement) {
+            let selectionRequirement = '';
+            let secondSubject = '';
+            
+            // 合并两个要求字段
+            let requirement = (groupRequirement || '') + (majorRequirement || '');
+            
+            // 清理特殊字符
+            requirement = requirement.replace(/^\^+/, '').replace(/\^+/g, '、').trim();
+            
+            if (!requirement || requirement === '' || requirement === '、') {
+                return { selectionRequirement, secondSubject };
+            }
+            
+            // 首先检查是否包含"必选"关键词
+            if (requirement.includes('必选')) {
+                // 提取必选的科目
+                const requiredSubjects = extractRequiredSubjects(requirement);
+                
+                if (requiredSubjects.length > 0) {
+                    selectionRequirement = '单科、多科均需选考';
+                    secondSubject = requiredSubjects.join('');
+                    return { selectionRequirement, secondSubject };
+                }
+            }
+            
+            // 处理其他情况（原逻辑）
+            if (requirement.includes('不限') || requirement === '无') {
+                selectionRequirement = '不限科目专业组';
+            }
+            else if (requirement.includes('首选')) {
+                const secondSubjects = [];
+                
+                if (requirement.includes('化学')) secondSubjects.push('化');
+                if (requirement.includes('生物')) secondSubjects.push('生');
+                if (requirement.includes('地理')) secondSubjects.push('地');
+                if (requirement.includes('政治')) secondSubjects.push('政');
+                
+                secondSubject = secondSubjects.join('');
+                
+                if (requirement.includes('选1') || requirement.includes('2选1') || requirement.includes('3选1') || requirement.includes('或')) {
+                    selectionRequirement = '多门选考';
+                } else if (secondSubjects.length > 0) {
+                    selectionRequirement = '单科、多科均需选考';
+                }
+            }
+            else if (requirement.includes('选1') || requirement.includes('或')) {
+                const subjects = extractSubjects(requirement);
+                const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
+                secondSubject = filteredSubjects.join('');
+                if (filteredSubjects.length > 0) {
+                    selectionRequirement = '多门选考';
+                }
+            }
+            else {
+                const subjects = extractSubjects(requirement);
+                if (subjects.length > 0) {
+                    const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
+                    secondSubject = filteredSubjects.join('');
+                    
+                    if (filteredSubjects.length > 0) {
+                        selectionRequirement = '单科、多科均需选考';
+                    }
+                }
+            }
+            
+            return { selectionRequirement, secondSubject };
+        }
+        
+        // 提取必选科目
+        // 提取必选科目（改进版）
+function extractRequiredSubjects(text) {
+    const subjects = [];
+    const subjectMap = {
+        '物理': '物',
+        '化学': '化', 
+        '生物': '生',
+        '历史': '历',
+        '地理': '地',
+        '政治': '政',
+        '技术': '技'
+    };
+    
+    // 清理文本，移除括号内容以便更好地匹配
+    let cleanText = text.replace(/\([^)]*\)/g, '').trim();
+    
+    // 首先尝试提取"必选"前的科目
+    if (cleanText.includes('必选')) {
+        // 获取"必选"前面的部分
+        const beforeRequired = cleanText.split('必选')[0];
+        
+        // 尝试匹配多种分隔符：顿号、逗号、空格
+        const separators = ['、', '，', ',', ' '];
+        
+        // 尝试按分隔符分割
+        for (const sep of separators) {
+            if (beforeRequired.includes(sep)) {
+                const parts = beforeRequired.split(sep).filter(p => p.trim());
+                for (const part of parts) {
+                    const trimmedPart = part.trim();
+                    for (const [fullName, shortName] of Object.entries(subjectMap)) {
+                        if (trimmedPart.includes(fullName) || fullName.includes(trimmedPart)) {
+                            if (!subjects.includes(shortName)) {
+                                subjects.push(shortName);
+                            }
+                        }
+                    }
+                }
+                break; // 使用第一个匹配的分隔符
+            }
+        }
+        
+        // 如果没有找到分隔符，尝试直接匹配整个字符串
+        if (subjects.length === 0) {
+            for (const [fullName, shortName] of Object.entries(subjectMap)) {
+                if (beforeRequired.includes(fullName)) {
+                    if (!subjects.includes(shortName)) {
+                        subjects.push(shortName);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 如果没有匹配到，尝试从整个文本中提取科目
+    if (subjects.length === 0) {
+        for (const [fullName, shortName] of Object.entries(subjectMap)) {
+            if (cleanText.includes(fullName)) {
+                if (!subjects.includes(shortName)) {
+                    subjects.push(shortName);
+                }
+            }
+        }
+    }
+    
+    return subjects;
+}
+
+// 转换选科要求 - 根据附件2示例优化
+function convertSelectionRequirement(groupRequirement, majorRequirement) {
+    let selectionRequirement = '';
+    let secondSubject = '';
+    
+    // 合并两个要求字段
+    let requirement = (groupRequirement || '') + (majorRequirement || '');
+    
+    // 清理特殊字符
+    requirement = requirement.replace(/^\^+/, '').replace(/\^+/g, '、').trim();
+    
+    if (!requirement || requirement === '' || requirement === '、') {
+        return { selectionRequirement, secondSubject };
+    }
+    
+    console.log('处理选科要求:', requirement);
+    
+    // 根据附件2示例处理各种情况
+    if (requirement.includes('不限') || requirement.includes('再选不限')) {
+        selectionRequirement = '不限科目专业组';
+    }
+    else if (requirement.includes('必选')) {
+        // 提取必选科目
+        const requiredSubjects = extractRequiredSubjects(requirement);
+        
+        console.log('提取的必选科目:', requiredSubjects);
+        
+        if (requiredSubjects.length > 0) {
+            selectionRequirement = '单科、多科均需选考';
+            secondSubject = requiredSubjects.join('');
+        }
+        
+        // 特殊处理：如果包含"首选"，可能需要排除首选科目
+        if (requirement.includes('首选')) {
+            // 从必选科目中移除首选科目
+            const preferredSubjects = [];
+            if (requirement.includes('首选物理')) {
+                preferredSubjects.push('物');
+            }
+            if (requirement.includes('首选历史')) {
+                preferredSubjects.push('历');
+            }
+            
+            // 从必选科目中移除首选科目
+            const filteredSubjects = requiredSubjects.filter(sub => 
+                !preferredSubjects.includes(sub)
+            );
+            
+            if (filteredSubjects.length > 0) {
+                secondSubject = filteredSubjects.join('');
+            }
+        }
+    }
+    else if (requirement.includes('首选') && requirement.includes('再选')) {
+        // 处理"首选物理，再选化学、生物"格式
+        const reSelectPart = requirement.split('再选')[1] || '';
+        const reSelectSubjects = extractRequiredSubjects(reSelectPart);
+        
+        if (reSelectSubjects.length > 0) {
+            selectionRequirement = '单科、多科均需选考';
+            secondSubject = reSelectSubjects.join('');
+        }
+    }
+    else if (requirement.includes('或') || requirement.includes('选1')) {
+        // 处理多选一情况
+        const subjects = extractRequiredSubjects(requirement);
+        const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
+        
+        if (filteredSubjects.length > 0) {
+            selectionRequirement = '多门选考';
+            secondSubject = filteredSubjects.join('');
+        }
+    }
+    else {
+        // 默认处理
+        const subjects = extractRequiredSubjects(requirement);
+        if (subjects.length > 0) {
+            const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
+            secondSubject = filteredSubjects.join('');
+            
+            if (filteredSubjects.length > 0) {
+                selectionRequirement = '单科、多科均需选考';
+            }
+        }
+    }
+    
+    console.log('转换结果:', { selectionRequirement, secondSubject });
+    
+    return { selectionRequirement, secondSubject };
+}
+        
+        // 提取科目简称
+        function extractSubjects(text) {
+            const subjects = [];
+            const subjectMap = {
+                '物理': '物',
+                '化学': '化',
+                '生物': '生',
+                '历史': '历',
+                '地理': '地',
+                '政治': '政',
+                '技术': '技'
+            };
+            
+            for (const [fullName, shortName] of Object.entries(subjectMap)) {
+                if (text.includes(fullName)) {
+                    subjects.push(shortName);
+                }
+            }
+            
+            return subjects;
+        }
+        
+        // 转换为文本格式
+        function convertToText(value) {
+            if (!value && value !== 0) return '';
+            
+            let text = String(value).replace(/^\^+/, '').trim();
+            
+            if (text === '') return '';
+            
+            text = text.replace(/^'/, '');
+            
+            return text;
+        }
+        
+        // 导出转换后的数据为Excel
+        function exportConvertedDataToExcel(data) {
+            if (!data || data.length === 0) {
+                alert('没有可导出的数据');
+                return;
+            }
+            
+            try {
+                // 创建工作簿
+                const wb = XLSX.utils.book_new();
+                
+                // 创建数据行
+                const wsData = [];
+                
+                // 第1行：备注（合并单元格）
+                const remarkText = `备注：请删除示例后再填写；
+1.省份：必须填写各省份简称，例如：北京、内蒙古，不能带有市、省、自治区、空格、特殊字符等
+2.科类：浙江、上海限定"综合、艺术类、体育类"，内蒙古限定"文科、理科、蒙授文科、蒙授理科、艺术类、艺术文、艺术理、体育类、体育文、体育理、蒙授艺术、蒙授体育"，其他省份限定"文科、理科、艺术类、艺术文、艺术理、体育类、体育文、体育理"
+3.批次：（以下为19年使用批次）
+河北、内蒙古、吉林、江苏、安徽、福建、江西、河南、湖北、广西、重庆、四川、贵州、云南、西藏、陕西、甘肃、宁夏、新疆限定本科提前批、本科一批、本科二批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；
+黑龙江、湖南、青海限定本科提前批、本科一批、本科二批、本科三批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；
+山西限定本科一批A段、本科一批B段、本科二批A段、本科二批B段、本科二批C段、专科批、国家专项计划本科批、地方专项计划本科批；
+浙江限定普通类提前批、平行录取一段、平行录取二段、平行录取三段
+4.招生人数：仅能填写数字
+5.最高分、最低分、平均分：仅能填写数字，保留小数后两位，且三者顺序不能改变，最低分为必填项，其中艺术类和体育类分数为文化课分数
+6.一级层次：限定"本科、专科（高职）"，该部分为招生专业对应的专业层次
+7.最低分位次：仅能填写数字;
+8.数据来源：必须限定——官方考试院、大红本数据、学校官网、销售、抓取、圣达信、优志愿、学业桥
+9.选科要求：不限科目专业组;多门选考;单科、多科均需选考
+10.选科科目必须是科目的简写（物、化、生、历、地、政、技）
+
+11.2020北京、海南，17-19上海仅限制本科专业组代码必填
+12.新八省首选科目必须选择（物理或历史）
+13.分数区间仅限北京`;
+                
+                wsData.push([remarkText]);
+                
+                // 第2行：招生年份
+                let admissionYear = '';
+                if (conversionData.length > 0 && conversionData[0]['年份']) {
+                    admissionYear = conversionData[0]['年份'];
+                }
+                wsData.push(['招生年份', admissionYear]);
+                
+                // 第3行：表头
+                const headers = [
+                    '学校名称', '省份', '招生专业', '专业方向（选填）', '专业备注（选填）', 
+                    '一级层次', '招生科类', '招生批次', '招生类型（选填）', '最高分', 
+                    '最低分', '平均分', '最低分位次（选填）', '招生人数（选填）', 
+                    '数据来源', '专业组代码', '首选科目', '选科要求', '次选科目', 
+                    '专业代码', '招生代码', '最低分数区间低', '最低分数区间高', 
+                    '最低分数区间位次低', '最低分数区间位次高', '录取人数（选填）'
+                ];
+                wsData.push(headers);
+                
+                // 数据行
+                data.forEach(row => {
+                    const rowData = headers.map(header => {
+                        const value = row[header];
+                        return value || '';
+                    });
+                    wsData.push(rowData);
+                });
+                
+                // 创建工作表
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                
+                // 设置合并单元格（第一行合并A1~Y1）
+                if (!ws['!merges']) ws['!merges'] = [];
+                ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 24 } });
+                
+                // 设置列宽
+                const colWidths = [];
+                for (let i = 0; i < headers.length; i++) {
+                    colWidths.push({ wch: 9.36 });
+                }
+                ws['!cols'] = colWidths;
+                
+                // 设置行高（第一行350磅）
+                if (!ws['!rows']) ws['!rows'] = [];
+                ws['!rows'][0] = { hpt: 350 };
+                
+                // 将工作表添加到工作簿
+                XLSX.utils.book_append_sheet(wb, ws, '专业分数据');
+                
+                // 生成文件
+                const wbout = XLSX.write(wb, { 
+                    bookType: 'xlsx', 
+                    type: 'binary',
+                    bookSST: false
+                });
+                
+                // 转换为Blob
+                const buffer = new ArrayBuffer(wbout.length);
+                const view = new Uint8Array(buffer);
+                for (let i = 0; i < wbout.length; i++) {
+                    view[i] = wbout.charCodeAt(i) & 0xFF;
+                }
+                
+                const blob = new Blob([buffer], { 
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                });
+                
+                // 生成文件名
+                const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const fileName = `专业分数据_未匹配数据_${dateStr}.xlsx`;
+                
+                // 下载文件
+                saveAs(blob, fileName);
+                
+                alert(`文件已导出: ${fileName}`);
+                
+            } catch (error) {
+                alert('导出失败: ' + error.message);
+                console.error('导出错误:', error);
+            }
+        }
+        
+        // 导出比对1中未匹配数据为专业分格式
+        function exportUnmatchedPlanScoreAsScore() {
+            const unmatchedResults = planScoreResults.filter(r => !r.exists);
+            if (unmatchedResults.length === 0) {
+                alert('比对1中没有未匹配的数据');
+                return;
+            }
+            
+            // 提取原始数据
+            conversionData = unmatchedResults.map(result => {
+                return planData[result.originalIndex];
+            });
+            
+            conversionSource = 'planScore';
+            
+            // 更新转换统计信息
+            updateConversionStats();
+            
+            // 显示转换区域
+            document.getElementById('conversionSection').style.display = 'block';
+            document.getElementById('conversionSection').scrollIntoView({ behavior: 'smooth' });
+            
+            // 更新工作流步骤
+            updateWorkflowStep(3);
+            
+            alert(`已提取 ${unmatchedResults.length} 条未匹配数据，请点击"转换并导出为专业分格式"按钮`);
+        }
+        
+        // 导出比对2中未匹配数据为专业分格式
+        function exportUnmatchedPlanCollegeAsScore() {
+            const unmatchedResults = planCollegeResults.filter(r => !r.exists);
+            if (unmatchedResults.length === 0) {
+                alert('比对2中没有未匹配的数据');
+                return;
+            }
+            
+            // 提取原始数据
+            conversionData = unmatchedResults.map(result => {
+                return planData[result.originalIndex];
+            });
+            
+            conversionSource = 'planCollege';
+            
+            // 更新转换统计信息
+            updateConversionStats();
+            
+            // 显示转换区域
+            document.getElementById('conversionSection').style.display = 'block';
+            document.getElementById('conversionSection').scrollIntoView({ behavior: 'smooth' });
+            
+            // 更新工作流步骤
+            updateWorkflowStep(3);
+            
+            alert(`已提取 ${unmatchedResults.length} 条未匹配数据，请点击"转换并导出为专业分格式"按钮`);
+        }
+        
+        // 以下为原有比对工具的功能（更新统计、筛选、显示等）
+        // 由于代码较长，这里只保留函数声明，具体实现与原始比对工具相同
+        
+        function updatePlanScoreStats() {
+            const filteredResults = getFilteredPlanScoreResults();
+            const total = filteredResults.length;
+            const matched = filteredResults.filter(r => r.exists).length;
+            const unmatched = total - matched;
+            
+            document.getElementById('planScoreTotal').textContent = total;
+            document.getElementById('planScoreMatched').textContent = matched;
+            document.getElementById('planScoreUnmatched').textContent = unmatched;
+            document.getElementById('planScoreRate').textContent = total > 0 ? 
+                ((matched / total * 100).toFixed(1) + '%') : '0%';
+        }
+        
+        function getFilteredPlanScoreResults() {
+            let filtered = planScoreResults;
+            
+            if (planScoreFilterState.province !== 'all' && planScoreFilterState.province !== '') {
+                filtered = filtered.filter(result => result.keyFields.省份 === planScoreFilterState.province);
+            }
+            
+            if (planScoreFilterState.batch !== 'all' && planScoreFilterState.batch !== '') {
+                filtered = filtered.filter(result => result.keyFields.批次 === planScoreFilterState.batch);
+            }
+            
+            if (planScoreFilterState.matchStatus === 'matched') {
+                filtered = filtered.filter(result => result.exists);
+            } else if (planScoreFilterState.matchStatus === 'unmatched') {
+                filtered = filtered.filter(result => !result.exists);
+            }
+            
+            return filtered;
+        }
+        
+        function initPlanScoreFilters() {
+            const provinceList = document.getElementById('planScoreProvinceList');
+            if (provinceList) {
+                provinceList.innerHTML = '<option value="全部省份">';
+                const provinces = [...new Set(planScoreResults.map(result => result.keyFields.省份).filter(province => province))].sort();
+                provinces.forEach(province => {
+                    const option = document.createElement('option');
+                    option.value = province;
+                    provinceList.appendChild(option);
+                });
+            }
+            
+            const batchList = document.getElementById('planScoreBatchList');
+            if (batchList) {
+                batchList.innerHTML = '<option value="全部批次">';
+                const batches = [...new Set(planScoreResults.map(result => result.keyFields.批次).filter(batch => batch))].sort();
+                batches.forEach(batch => {
+                    const option = document.createElement('option');
+                    option.value = batch;
+                    batchList.appendChild(option);
+                });
+            }
+        }
+        
+        function applyPlanScoreFilter() {
+            const provinceFilter = document.getElementById('planScoreProvinceFilter');
+            const batchFilter = document.getElementById('planScoreBatchFilter');
+            const matchStatusFilter = document.getElementById('planScoreMatchStatusFilter');
+            const displayOption = document.getElementById('planScoreDisplayOption');
+            
+            planScoreFilterState.province = provinceFilter.value === '' ? 'all' : provinceFilter.value;
+            planScoreFilterState.batch = batchFilter.value === '' ? 'all' : batchFilter.value;
+            planScoreFilterState.matchStatus = matchStatusFilter.value;
+            planScoreFilterState.displayOption = displayOption.value;
+            
+            updatePlanScoreStats();
+            displayPlanScoreResults();
+            updatePlanScoreCurrentFilter();
+        }
+        
+        function resetPlanScoreFilter() {
+            document.getElementById('planScoreProvinceFilter').value = '';
+            document.getElementById('planScoreBatchFilter').value = '';
+            document.getElementById('planScoreMatchStatusFilter').value = 'all';
+            document.getElementById('planScoreDisplayOption').value = 'all';
+            
+            planScoreFilterState.province = 'all';
+            planScoreFilterState.batch = 'all';
+            planScoreFilterState.matchStatus = 'all';
+            planScoreFilterState.displayOption = 'all';
+            
+            updatePlanScoreStats();
+            displayPlanScoreResults();
+            document.getElementById('planScoreCurrentFilter').style.display = 'none';
+        }
+        
+        function updatePlanScoreCurrentFilter() {
+            const currentFilterDiv = document.getElementById('planScoreCurrentFilter');
+            let filterText = '';
+            
+            const filters = [];
+            
+            if (planScoreFilterState.province !== 'all' && planScoreFilterState.province !== '') {
+                filters.push(`省份: ${planScoreFilterState.province}`);
+            }
+            
+            if (planScoreFilterState.batch !== 'all' && planScoreFilterState.batch !== '') {
+                filters.push(`批次: ${planScoreFilterState.batch}`);
+            }
+            
+            if (planScoreFilterState.matchStatus !== 'all') {
+                filters.push(`匹配状态: ${planScoreFilterState.matchStatus === 'matched' ? '匹配' : '未匹配'}`);
+            }
+            
+            if (planScoreFilterState.displayOption === '100') {
+                filters.push('仅显示前100条记录');
+            } else if (planScoreFilterState.displayOption === '500') {
+                filters.push('仅显示前500条记录');
+            } else {
+                filters.push('显示全部记录');
+            }
+            
+            if (filters.length > 0) {
+                filterText = '当前筛选: ' + filters.join(' | ');
+                currentFilterDiv.textContent = filterText;
+                currentFilterDiv.style.display = 'block';
+            } else {
+                currentFilterDiv.style.display = 'none';
+            }
+        }
+        
+        function updatePlanCollegeStats() {
+            const filteredResults = getFilteredPlanCollegeResults();
+            const total = filteredResults.length;
+            const matched = filteredResults.filter(r => r.exists).length;
+            const unmatched = total - matched;
+            
+            document.getElementById('planCollegeTotal').textContent = total;
+            document.getElementById('planCollegeMatched').textContent = matched;
+            document.getElementById('planCollegeUnmatched').textContent = unmatched;
+            document.getElementById('planCollegeRate').textContent = total > 0 ? 
+                ((matched / total * 100).toFixed(1) + '%') : '0%';
+        }
+        
+        function getFilteredPlanCollegeResults() {
+            let filtered = planCollegeResults;
+            
+            if (planCollegeFilterState.province !== 'all' && planCollegeFilterState.province !== '') {
+                filtered = filtered.filter(result => result.keyFields.省份 === planCollegeFilterState.province);
+            }
+            
+            if (planCollegeFilterState.batch !== 'all' && planCollegeFilterState.batch !== '') {
+                filtered = filtered.filter(result => result.keyFields.批次 === planCollegeFilterState.batch);
+            }
+            
+            if (planCollegeFilterState.matchStatus === 'matched') {
+                filtered = filtered.filter(result => result.exists);
+            } else if (planCollegeFilterState.matchStatus === 'unmatched') {
+                filtered = filtered.filter(result => !result.exists);
+            }
+            
+            return filtered;
+        }
+        
+        function initPlanCollegeFilters() {
+            const provinceList = document.getElementById('planCollegeProvinceList');
+            if (provinceList) {
+                provinceList.innerHTML = '<option value="全部省份">';
+                const provinces = [...new Set(planCollegeResults.map(result => result.keyFields.省份).filter(province => province))].sort();
+                provinces.forEach(province => {
+                    const option = document.createElement('option');
+                    option.value = province;
+                    provinceList.appendChild(option);
+                });
+            }
+            
+            const batchList = document.getElementById('planCollegeBatchList');
+            if (batchList) {
+                batchList.innerHTML = '<option value="全部批次">';
+                const batches = [...new Set(planCollegeResults.map(result => result.keyFields.批次).filter(batch => batch))].sort();
+                batches.forEach(batch => {
+                    const option = document.createElement('option');
+                    option.value = batch;
+                    batchList.appendChild(option);
+                });
+            }
+        }
+        
+        function applyPlanCollegeFilter() {
+            const provinceFilter = document.getElementById('planCollegeProvinceFilter');
+            const batchFilter = document.getElementById('planCollegeBatchFilter');
+            const matchStatusFilter = document.getElementById('planCollegeMatchStatusFilter');
+            const displayOption = document.getElementById('planCollegeDisplayOption');
+            
+            planCollegeFilterState.province = provinceFilter.value === '' ? 'all' : provinceFilter.value;
+            planCollegeFilterState.batch = batchFilter.value === '' ? 'all' : batchFilter.value;
+            planCollegeFilterState.matchStatus = matchStatusFilter.value;
+            planCollegeFilterState.displayOption = displayOption.value;
+            
+            updatePlanCollegeStats();
+            displayPlanCollegeResults();
+            updatePlanCollegeCurrentFilter();
+        }
+        
+        function resetPlanCollegeFilter() {
+            document.getElementById('planCollegeProvinceFilter').value = '';
+            document.getElementById('planCollegeBatchFilter').value = '';
+            document.getElementById('planCollegeMatchStatusFilter').value = 'all';
+            document.getElementById('planCollegeDisplayOption').value = 'all';
+            
+            planCollegeFilterState.province = 'all';
+            planCollegeFilterState.batch = 'all';
+            planCollegeFilterState.matchStatus = 'all';
+            planCollegeFilterState.displayOption = 'all';
+            
+            updatePlanCollegeStats();
+            displayPlanCollegeResults();
+            document.getElementById('planCollegeCurrentFilter').style.display = 'none';
+        }
+        
+        function updatePlanCollegeCurrentFilter() {
+            const currentFilterDiv = document.getElementById('planCollegeCurrentFilter');
+            let filterText = '';
+            
+            const filters = [];
+            
+            if (planCollegeFilterState.province !== 'all' && planCollegeFilterState.province !== '') {
+                filters.push(`省份: ${planCollegeFilterState.province}`);
+            }
+            
+            if (planCollegeFilterState.batch !== 'all' && planCollegeFilterState.batch !== '') {
+                filters.push(`批次: ${planCollegeFilterState.batch}`);
+            }
+            
+            if (planCollegeFilterState.matchStatus !== 'all') {
+                filters.push(`匹配状态: ${planCollegeFilterState.matchStatus === 'matched' ? '匹配' : '未匹配'}`);
+            }
+            
+            if (planCollegeFilterState.displayOption === '100') {
+                filters.push('仅显示前100条记录');
+            } else if (planCollegeFilterState.displayOption === '500') {
+                filters.push('仅显示前500条记录');
+            } else {
+                filters.push('显示全部记录');
+            }
+            
+            if (filters.length > 0) {
+                filterText = '当前筛选: ' + filters.join(' | ');
+                currentFilterDiv.textContent = filterText;
+                currentFilterDiv.style.display = 'block';
+            } else {
+                currentFilterDiv.style.display = 'none';
+            }
+        }
+        
+        function displayPlanScoreResults() {
+            const tableContainer = document.getElementById('planScoreResultsTable');
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="50">序号</th>
+                            <th width="100">年份</th>
+                            <th width="80">省份</th>
+                            <th width="150">学校</th>
+                            <th width="60">科类</th>
+                            <th width="80">批次</th>
+                            <th width="150">专业</th>
+                            <th width="80">层次</th>
+                            <th width="100">招生人数</th>
+                            <th width="100">匹配状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            const filteredResults = getFilteredPlanScoreResults();
+            
+            let displayCount = filteredResults.length;
+            if (planScoreFilterState.displayOption === '100' && filteredResults.length > 100) {
+                displayCount = 100;
+            } else if (planScoreFilterState.displayOption === '500' && filteredResults.length > 500) {
+                displayCount = 500;
+            }
+            
+            for (let i = 0; i < displayCount; i++) {
+                const result = filteredResults[i];
+                const fields = result.keyFields;
+                
+                html += `
+                    <tr>
+                        <td>${result.index}</td>
+                        <td>${fields.年份}</td>
+                        <td>${fields.省份}</td>
+                        <td title="${fields.学校}">${fields.学校.length > 8 ? fields.学校.substring(0, 8) + '...' : fields.学校}</td>
+                        <td>${fields.科类}</td>
+                        <td>${fields.批次}</td>
+                        <td title="${fields.专业}">${fields.专业.length > 10 ? fields.专业.substring(0, 10) + '...' : fields.专业}</td>
+                        <td>${fields.层次}</td>
+                        <td>${result.otherInfo.招生人数 || '-'}</td>
+                        <td>
+                            <span class="${result.exists ? 'status-exists' : 'status-not-exists'}">
+                                ${result.exists ? '✓ 存在' : '✗ 不存在'}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            html += `</tbody></table>`;
+            
+            if ((planScoreFilterState.displayOption === '100' && filteredResults.length > 100) || 
+                (planScoreFilterState.displayOption === '500' && filteredResults.length > 500)) {
+                const limit = planScoreFilterState.displayOption === '100' ? 100 : 500;
+                html += `<p style="text-align:center; margin-top:10px; color:#7f8c8d;">
+                    仅显示前${limit}条记录，共${filteredResults.length}条记录。导出Excel查看全部结果，或选择"显示全部记录"查看所有数据。
+                </p>`;
+            } else if (filteredResults.length > 500) {
+                html += `<p style="text-align:center; margin-top:10px; color:#7f8c8d;">
+                    当前显示${filteredResults.length}条记录。数据量较大，建议使用筛选功能查看特定数据。
+                </p>`;
+            }
+            
+            tableContainer.innerHTML = html;
+        }
+        
+        function displayPlanCollegeResults() {
+            const tableContainer = document.getElementById('planCollegeResultsTable');
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="50">序号</th>
+                            <th width="100">年份</th>
+                            <th width="80">省份</th>
+                            <th width="150">学校</th>
+                            <th width="60">科类</th>
+                            <th width="80">批次</th>
+                            <th width="100">专业</th>
+                            <th width="100">匹配状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            const filteredResults = getFilteredPlanCollegeResults();
+            
+            let displayCount = filteredResults.length;
+            if (planCollegeFilterState.displayOption === '100' && filteredResults.length > 100) {
+                displayCount = 100;
+            } else if (planCollegeFilterState.displayOption === '500' && filteredResults.length > 500) {
+                displayCount = 500;
+            }
+            
+            for (let i = 0; i < displayCount; i++) {
+                const result = filteredResults[i];
+                const fields = result.keyFields;
+                
+                html += `
+                    <tr>
+                        <td>${result.index}</td>
+                        <td>${fields.年份}</td>
+                        <td>${fields.省份}</td>
+                        <td title="${fields.学校}">${fields.学校.length > 8 ? fields.学校.substring(0, 8) + '...' : fields.学校}</td>
+                        <td>${fields.科类}</td>
+                        <td>${fields.批次}</td>
+                        <td title="${result.otherInfo.专业}">${result.otherInfo.专业.length > 10 ? result.otherInfo.专业.substring(0, 10) + '...' : result.otherInfo.专业}</td>
+                        <td>
+                            <span class="${result.exists ? 'status-exists' : 'status-not-exists'}">
+                                ${result.exists ? '✓ 存在' : '✗ 不存在'}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            html += `</tbody></table>`;
+            
+            if ((planCollegeFilterState.displayOption === '100' && filteredResults.length > 100) || 
+                (planCollegeFilterState.displayOption === '500' && filteredResults.length > 500)) {
+                const limit = planCollegeFilterState.displayOption === '100' ? 100 : 500;
+                html += `<p style="text-align:center; margin-top:10px; color:#7f8c8d;">
+                    仅显示前${limit}条记录，共${filteredResults.length}条记录。导出Excel查看全部结果，或选择"显示全部记录"查看所有数据。
+                </p>`;
+            } else if (filteredResults.length > 500) {
+                html += `<p style="text-align:center; margin-top:10px; color:#7f8c8d;">
+                    当前显示${filteredResults.length}条记录。数据量较大，建议使用筛选功能查看特定数据。
+                </p>`;
+            }
+            
+            tableContainer.innerHTML = html;
+        }
+        
+        function checkExportAllButton() {
+            const exportAllBtn = document.getElementById('exportAllBtn');
+            if (planScoreResults.length > 0 || planCollegeResults.length > 0) {
+                exportAllBtn.style.display = 'inline-block';
+            } else {
+                exportAllBtn.style.display = 'none';
+            }
+        }
+        
+        function exportPlanScoreResults() {
+            if (planScoreResults.length === 0) {
+                alert('没有可导出的数据');
+                return;
+            }
+            
+            try {
+                const exportData = planScoreResults.map(result => ({
+                    '序号': result.index,
+                    '年份': result.keyFields.年份,
+                    '省份': result.keyFields.省份,
+                    '学校': result.keyFields.学校,
+                    '科类': result.keyFields.科类,
+                    '批次': result.keyFields.批次,
+                    '专业': result.keyFields.专业,
+                    '层次': result.keyFields.层次,
+                    '招生人数': result.otherInfo.招生人数,
+                    '学费': result.otherInfo.学费,
+                    '学制': result.otherInfo.学制,
+                    '专业代码': result.otherInfo.专业代码,
+                    '匹配状态': result.exists ? '存在' : '不存在',
+                    '匹配说明': result.exists ? 
+                        '该记录在专业分文件中存在' : 
+                        '该记录在专业分文件中不存在'
+                }));
+                
+                const worksheet = XLSX.utils.json_to_sheet(exportData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, '比对1_招生计划vs专业分');
+                
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const filename = `比对1_招生计划vs专业分_${timestamp}.xlsx`;
+                
+                XLSX.writeFile(workbook, filename);
+                
+                alert(`比对1结果已导出为 ${filename}`);
+                
+            } catch (error) {
+                alert('导出失败: ' + error.message);
+                console.error('导出错误:', error);
+            }
+        }
+        
+        function exportPlanCollegeResults() {
+            if (planCollegeResults.length === 0) {
+                alert('没有可导出的数据');
+                return;
+            }
+            
+            try {
+                const exportData = planCollegeResults.map(result => {
+                    return {
+                        '序号': result.index,
+                        '年份': result.keyFields.年份,
+                        '省份': result.keyFields.省份,
+                        '学校': result.keyFields.学校,
+                        '科类': result.keyFields.科类,
+                        '批次': result.keyFields.批次,
+                        '专业': result.otherInfo.专业,
+                        '层次': result.otherInfo.层次,
+                        '招生人数': result.otherInfo.招生人数,
+                        '匹配状态': result.exists ? '存在' : '不存在',
+                        '匹配说明': result.exists ? 
+                            '该记录在院校分文件中存在' : 
+                            '该记录在院校分文件中不存在'
+                    };
+                });
+                
+                const worksheet = XLSX.utils.json_to_sheet(exportData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, '比对2_招生计划vs院校分');
+                
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const filename = `比对2_招生计划vs院校分_${timestamp}.xlsx`;
+                
+                XLSX.writeFile(workbook, filename);
+                
+                alert(`比对2结果已导出为 ${filename}`);
+                
+            } catch (error) {
+                alert('导出失败: ' + error.message);
+                console.error('导出错误:', error);
+            }
+        }
+        
+        function exportAllResults() {
+            if (planScoreResults.length === 0 && planCollegeResults.length === 0) {
+                alert('没有可导出的数据');
+                return;
+            }
+            
+            try {
+                const workbook = XLSX.utils.book_new();
+                
+                if (planScoreResults.length > 0) {
+                    const planScoreExportData = planScoreResults.map(result => ({
+                        '序号': result.index,
+                        '年份': result.keyFields.年份,
+                        '省份': result.keyFields.省份,
+                        '学校': result.keyFields.学校,
+                        '科类': result.keyFields.科类,
+                        '批次': result.keyFields.批次,
+                        '专业': result.keyFields.专业,
+                        '层次': result.keyFields.层次,
+                        '招生人数': result.otherInfo.招生人数,
+                        '学费': result.otherInfo.学费,
+                        '学制': result.otherInfo.学制,
+                        '专业代码': result.otherInfo.专业代码,
+                        '匹配状态': result.exists ? '存在' : '不存在',
+                        '匹配说明': result.exists ? 
+                            '该记录在专业分文件中存在' : 
+                            '该记录在专业分文件中不存在'
+                    }));
+                    
+                    const planScoreWorksheet = XLSX.utils.json_to_sheet(planScoreExportData);
+                    XLSX.utils.book_append_sheet(workbook, planScoreWorksheet, '比对1_招生计划vs专业分');
+                }
+                
+                if (planCollegeResults.length > 0) {
+                    const planCollegeExportData = planCollegeResults.map(result => {
+                        return {
+                            '序号': result.index,
+                            '年份': result.keyFields.年份,
+                            '省份': result.keyFields.省份,
+                            '学校': result.keyFields.学校,
+                            '科类': result.keyFields.科类,
+                            '批次': result.keyFields.批次,
+                            '专业': result.otherInfo.专业,
+                            '层次': result.otherInfo.层次,
+                            '招生人数': result.otherInfo.招生人数,
+                            '匹配状态': result.exists ? '存在' : '不存在',
+                            '匹配说明': result.exists ? 
+                                '该记录在院校分文件中存在' : 
+                                '该记录在院校分文件中不存在'
+                        };
+                    });
+                    
+                    const planCollegeWorksheet = XLSX.utils.json_to_sheet(planCollegeExportData);
+                    XLSX.utils.book_append_sheet(workbook, planCollegeWorksheet, '比对2_招生计划vs院校分');
+                }
+                
+                const summaryData = [
+                    ['数据比对工具统计报告', '', '', ''],
+                    ['生成时间', new Date().toLocaleString(), '', ''],
+                    ['', '', '', ''],
+                    ['比对类型', '总记录数', '匹配记录数', '匹配率'],
+                    ['比对1：招生计划 vs 专业分', 
+                     planScoreResults.length, 
+                     planScoreResults.filter(r => r.exists).length, 
+                     planScoreResults.length > 0 ? ((planScoreResults.filter(r => r.exists).length / planScoreResults.length * 100).toFixed(1) + '%') : '0%'],
+                    ['比对2：招生计划 vs 院校分', 
+                     planCollegeResults.length, 
+                     planCollegeResults.filter(r => r.exists).length, 
+                     planCollegeResults.length > 0 ? ((planCollegeResults.filter(r => r.exists).length / planCollegeResults.length * 100).toFixed(1) + '%') : '0%']
+                ];
+                
+                const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
+                XLSX.utils.book_append_sheet(workbook, summaryWorksheet, '统计报告');
+                
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const filename = `数据比对结果汇总_${timestamp}.xlsx`;
+                
+                XLSX.writeFile(workbook, filename);
+                
+                alert(`全部结果已导出为 ${filename}\n包含${workbook.SheetNames.length}个工作表`);
+                
+            } catch (error) {
+                alert('导出失败: ' + error.message);
+                console.error('导出错误:', error);
+            }
+        }
+        
+        function resetAll() {
+            isComparing = false;
+            
+            planData = [];
+            scoreData = [];
+            collegeData = [];
+            
+            document.getElementById('planFile').value = '';
+            document.getElementById('scoreFile').value = '';
+            document.getElementById('collegeFile').value = '';
+            
+            document.getElementById('planInfo').textContent = '等待上传文件...';
+            document.getElementById('scoreInfo').textContent = '等待上传文件...';
+            document.getElementById('collegeInfo').textContent = '等待上传文件...';
+            
+            resetComparisonResults();
+            
+            document.getElementById('resultSection').style.display = 'none';
+            
+            switchTab('planScoreTab');
+            
+            checkAllFilesLoaded();
+            
+            alert('重置完成！所有数据和状态已清除。');
+        }
+        
+        function switchTab(tabId) {
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            tabBtns.forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.getElementById(tabId).classList.add('active');
+            document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+        }
+        
+        function showResultSection() {
+            document.getElementById('resultSection').style.display = 'block';
+            document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function startLoading(text) {
+            if (text) {
+                document.getElementById('loadingText').textContent = text;
+            }
+            document.getElementById('loading').style.display = 'block';
+        }
+        
+        function stopLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        console.log('招生计划数据比对与转换工具已加载');
+    </script>
+</body>
+</html>
