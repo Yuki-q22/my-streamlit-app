@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import openpyxl
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Alignment
 from openpyxl.styles import numbers
 import base64
 import sys
@@ -325,11 +325,25 @@ expected_columns = [
     '专业组代码', '首选科目', '选科要求', '次选科目', '专业代码', '招生代码', '录取人数（选填）'
 ]
 columns_to_convert = [
-    '专业组代码', '专业代码', '招生代码', '最高分', '最低分', '平均分', '最低分位次（选填）',
+    '专业组代码', '专业代码', '招生代码', '最高分', '最低分', '最低分位次（选填）',
     '招生人数（选填）'
 ]
 
 def process_score_file(file_path):
+    # 首先读取年份（从B2单元格）
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        ws = wb.active
+        year_value = ws['B2'].value
+        if year_value is None:
+            # 如果B2为空，尝试从数据中提取年份
+            year_value = ''
+        else:
+            year_value = str(year_value).strip()
+        wb.close()
+    except Exception as e:
+        year_value = ''
+
     try:
         df = pd.read_excel(file_path, header=2, dtype={
             '专业组代码': str,
@@ -337,7 +351,6 @@ def process_score_file(file_path):
             '招生代码': str,
             '最高分': str,
             '最低分': str,
-            '平均分': str,
             '最低分位次（选填）': str,
             '招生人数（选填）': str,
             '录取人数（选填）': str
@@ -415,29 +428,101 @@ def process_score_file(file_path):
     if result.empty:
         raise Exception("筛选结果为空。")
 
-    # 保留期望列，但排除招生专业和专业方向、专业备注、选科要求、次选科目
-    selected_columns = [col for col in expected_columns if col in result.columns and col not in ['招生专业', '专业方向（选填）', '专业备注（选填）', '选科要求', '次选科目']]
-    result = result[selected_columns]
+    # 构建新的数据框，按照新的列顺序
+    new_columns = [
+        '学校名称', '省份', '招生类别', '招生批次', '招生类型', '选测等级', 
+        '最高分', '最低分', '平均分', '最高位次', '最低位次', '平均位次', 
+        '录取人数', '招生人数', '数据来源', '省控线科类', '省控线批次', '省控线备注', 
+        '专业组代码', '首选科目', '院校招生代码'
+    ]
+    
+    # 创建新的DataFrame，确保所有列都有正确的长度
+    num_rows = len(result)
+    new_result = pd.DataFrame(index=range(num_rows))
+    
+    # 辅助函数：处理列值，将NaN转换为空字符串
+    def get_col_values(col_name, default=''):
+        if col_name in result.columns:
+            values = result[col_name].fillna(default).astype(str).values
+            # 将'nan'字符串转换回空字符串
+            values = ['' if str(v).lower() == 'nan' else v for v in values]
+            return values
+        else:
+            return [default] * num_rows
+    
+    new_result['学校名称'] = get_col_values('学校名称')
+    new_result['省份'] = get_col_values('省份')
+    new_result['招生类别'] = get_col_values('招生科类')
+    new_result['招生批次'] = get_col_values('招生批次')
+    new_result['招生类型'] = get_col_values('招生类型（选填）')
+    new_result['选测等级'] = [''] * num_rows  # 新字段，设为空
+    new_result['最高分'] = get_col_values('最高分')
+    new_result['最低分'] = get_col_values('最低分')
+    new_result['平均分'] = [''] * num_rows  # 删除平均分提取逻辑，设为空
+    new_result['最高位次'] = [''] * num_rows  # 新字段，设为空
+    new_result['最低位次'] = get_col_values('最低分位次（选填）')
+    new_result['平均位次'] = [''] * num_rows  # 新字段，设为空
+    new_result['录取人数'] = get_col_values('录取人数（选填）')
+    new_result['招生人数'] = get_col_values('招生人数（选填）')
+    new_result['数据来源'] = get_col_values('数据来源')
+    new_result['省控线科类'] = [''] * num_rows  # 新字段，设为空
+    new_result['省控线批次'] = [''] * num_rows  # 新字段，设为空
+    new_result['省控线备注'] = [''] * num_rows  # 新字段，设为空
+    new_result['专业组代码'] = get_col_values('专业组代码')
+    new_result['首选科目'] = get_col_values('首选科目')
+    new_result['院校招生代码'] = get_col_values('招生代码')
 
     output_path = file_path.replace('.xlsx', '_院校分.xlsx')
 
     try:
+        # 创建备注文本
+        remark_text = """备注：请删除示例后再填写；
+1.省份：必须填写各省份简称，例如：北京、内蒙古，不能带有市、省、自治区、空格、特殊字符等
+2.科类：浙江、上海限定"综合、艺术类、体育类"，内蒙古限定"文科、理科、蒙授文科、蒙授理科、艺术类、艺术文、艺术理、体育类、体育文、体育理、蒙授艺术、蒙授体育"，其他省份限定"文科、理科、艺术类、艺术文、艺术理、体育类、体育文、体育理"
+3.批次：（以下为19年使用批次）
+    北京、天津、辽宁、上海、山东、广东、海南限定本科提前批、本科批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；
+    河北、内蒙古、吉林、江苏、安徽、福建、江西、河南、湖北、广西、重庆、四川、贵州、云南、西藏、陕西、甘肃、宁夏、新疆限定本科提前批、本科一批、本科二批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；
+    黑龙江、湖南、青海限定本科提前批、本科一批、本科二批、本科三批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；
+    山西限定本科一批A段、本科一批B段、本科二批A段、本科二批B段、本科二批C段、专科批、国家专项计划本科批、地方专项计划本科批；
+    浙江限定普通类提前批、平行录取一段、平行录取二段、平行录取三段
+4.最高分、最低分、平均分：仅能填写数字（最多保留2位小数），且三者顺序不能改变，最低分为必填项，其中艺术类和体育类分数为文化课分数
+5.最低分位次：仅能填写数字
+6.录取人数：仅能填写数字
+7.首选科目：新八省必填，只能填写（历史或物理）"""
+
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            result.to_excel(writer, index=False)
+            # 先写入数据（从第4行开始，因为前3行是标题和备注）
+            new_result.to_excel(writer, index=False, startrow=3)
             workbook = writer.book
             worksheet = writer.sheets['Sheet1']
 
-            for col in ['专业组代码', '专业代码', '招生代码']:
-                if col in result.columns:
-                    col_idx = result.columns.get_loc(col) + 1
-                    for row in range(2, len(result) + 2):
-                        worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
+            # 第一行：合并A1-U1并写入备注
+            worksheet.merge_cells('A1:U1')
+            worksheet['A1'] = remark_text
+            worksheet['A1'].alignment = Alignment(wrap_text=True, vertical='top')
+            
+            # 第二行：A2="招生年"，B2=年份，C2="1"，D2="模板类型（模板标识不要更改）"
+            worksheet['A2'] = '招生年'
+            worksheet['B2'] = year_value
+            worksheet['C2'] = '1'
+            worksheet['D2'] = '模板类型（模板标识不要更改）'
+            
+            # 第三行：标题行
+            headers = ['学校名称', '省份', '招生类别', '招生批次', '招生类型', '选测等级', 
+                      '最高分', '最低分', '平均分', '最高位次', '最低位次', '平均位次', 
+                      '录取人数', '招生人数', '数据来源', '省控线科类', '省控线批次', '省控线备注', 
+                      '专业组代码', '首选科目', '院校招生代码']
+            for col_idx, header in enumerate(headers, start=1):
+                worksheet.cell(row=3, column=col_idx, value=header)
 
-            for col in columns_to_convert:
-                if col in result.columns and col not in ['专业组代码', '专业代码', '招生代码']:
-                    col_idx = result.columns.get_loc(col) + 1
-                    for cell in list(worksheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, values_only=False))[0]:
-                        cell.number_format = numbers.FORMAT_TEXT
+            # 设置文本格式（从第4行开始，即数据行）
+            # 需要设置为文本格式的列（使用新列名）
+            text_format_cols = ['专业组代码', '院校招生代码', '最高分', '最低分', '最低位次', '录取人数', '招生人数']
+            for col in text_format_cols:
+                if col in new_result.columns:
+                    col_idx = new_result.columns.get_loc(col) + 1
+                    for row in range(4, len(new_result) + 4):
+                        worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
 
         return output_path
     except Exception as e:
