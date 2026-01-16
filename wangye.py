@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import logging
 import re
+import streamlit.components.v1 as components
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import openpyxl
@@ -981,8 +982,18 @@ with st.expander("📢 版本更新（2025.9.26更新）（必看！）", expand
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["院校分提取（普通类）","院校分提取（艺体类）", "学业桥数据处理", "一分一段校验", "专业组代码匹配（可以用，需要检查！）", "就业质量报告图片提取"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+    [
+        "院校分提取（普通类）",
+        "院校分提取（艺体类）",
+        "学业桥数据处理",
+        "一分一段校验",
+        "专业组代码匹配（可以用，需要检查！）",
+        "就业质量报告图片提取",
+        "招生计划数据比对（HTML工具）"
+    ]
+)
+
 
 # ====================== 院校分提取 ======================
 with tab1:
@@ -1295,6 +1306,25 @@ with tab6:
                     st.warning("PDF合成失败")
             else:
                 st.warning("未抓取到任何图片")
+
+# ====================== 招生计划数据比对（HTML原工具） ======================
+with tab7:
+    st.header("招生计划数据比对与转换工具")
+
+    html_path = "264437b0-a2dc-4d9e-acfb-1f3509057ec1.html"
+
+    if not os.path.exists(html_path):
+        st.error("未找到 HTML 文件，请确认已将 HTML 文件放在与 wangye.py 同一目录下。")
+    else:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+
+        components.html(
+            html_content,
+            height=1200,
+            scrolling=True
+        )
+
 
 # 页脚
 st.markdown("---")
