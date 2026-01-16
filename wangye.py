@@ -440,13 +440,25 @@ def process_score_file(file_path):
     num_rows = len(result)
     new_result = pd.DataFrame(index=range(num_rows))
     
-    # 辅助函数：处理列值，将NaN转换为空字符串
+    # 辅助函数：处理列值，将NaN转换为空字符串（用于文本列）
     def get_col_values(col_name, default=''):
         if col_name in result.columns:
             values = result[col_name].fillna(default).astype(str).values
             # 将'nan'字符串转换回空字符串
             values = ['' if str(v).lower() == 'nan' else v for v in values]
             return values
+        else:
+            return [default] * num_rows
+    
+    # 辅助函数：处理数字列值，保持数字类型
+    def get_numeric_values(col_name, default=0):
+        if col_name in result.columns:
+            values = result[col_name].fillna(default)
+            # 尝试转换为数字，无法转换的保持原值或设为默认值
+            try:
+                return pd.to_numeric(values, errors='coerce').fillna(default).values
+            except:
+                return [default] * num_rows
         else:
             return [default] * num_rows
     
@@ -462,8 +474,8 @@ def process_score_file(file_path):
     new_result['最高位次'] = [''] * num_rows  # 新字段，设为空
     new_result['最低位次'] = get_col_values('最低分位次（选填）')
     new_result['平均位次'] = [''] * num_rows  # 新字段，设为空
-    new_result['录取人数'] = get_col_values('录取人数（选填）')
-    new_result['招生人数'] = get_col_values('招生人数（选填）')
+    new_result['录取人数'] = get_numeric_values('录取人数（选填）', default=0)  # 保持数字格式
+    new_result['招生人数'] = get_numeric_values('招生人数（选填）', default=0)  # 保持数字格式
     new_result['数据来源'] = get_col_values('数据来源')
     new_result['省控线科类'] = [''] * num_rows  # 新字段，设为空
     new_result['省控线批次'] = [''] * num_rows  # 新字段，设为空
@@ -505,8 +517,17 @@ def process_score_file(file_path):
             
             # 第二行：A2="招生年"，B2=年份，C2="1"，D2="模板类型（模板标识不要更改）"
             worksheet['A2'] = '招生年'
-            worksheet['B2'] = year_value
-            worksheet['C2'] = '1'
+            # B2和C2设置为数字格式
+            try:
+                # 尝试将年份转换为数字
+                if year_value and str(year_value).strip():
+                    year_num = int(float(str(year_value).strip()))
+                    worksheet['B2'] = year_num
+                else:
+                    worksheet['B2'] = ''
+            except:
+                worksheet['B2'] = year_value
+            worksheet['C2'] = 1  # 直接设置为数字1
             worksheet['D2'] = '模板类型（模板标识不要更改）'
             
             # 第三行：标题行
@@ -525,6 +546,35 @@ def process_score_file(file_path):
                     col_idx = new_result.columns.get_loc(col) + 1
                     for row in range(4, len(new_result) + 4):
                         worksheet.cell(row=row, column=col_idx).number_format = numbers.FORMAT_TEXT
+            
+            # 确保B2和C2单元格保持数字格式
+            if worksheet['B2'].value is not None and str(worksheet['B2'].value).strip():
+                try:
+                    worksheet['B2'].value = int(float(str(worksheet['B2'].value)))
+                except:
+                    pass
+            worksheet['C2'].value = 1
+            
+            # 确保"录取人数"和"招生人数"列保持数字格式（从第4行开始）
+            if '录取人数' in new_result.columns:
+                col_idx = new_result.columns.get_loc('录取人数') + 1
+                for row in range(4, len(new_result) + 4):
+                    cell = worksheet.cell(row=row, column=col_idx)
+                    if cell.value is not None:
+                        try:
+                            cell.value = float(cell.value) if str(cell.value).strip() else 0
+                        except:
+                            pass
+            
+            if '招生人数' in new_result.columns:
+                col_idx = new_result.columns.get_loc('招生人数') + 1
+                for row in range(4, len(new_result) + 4):
+                    cell = worksheet.cell(row=row, column=col_idx)
+                    if cell.value is not None:
+                        try:
+                            cell.value = float(cell.value) if str(cell.value).strip() else 0
+                        except:
+                            pass
 
         return output_path
     except Exception as e:
