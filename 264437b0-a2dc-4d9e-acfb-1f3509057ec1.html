@@ -634,6 +634,7 @@
                 <span class="match-fields">批次</span>
                 <span class="match-fields">专业</span>
                 <span class="match-fields">层次</span>
+                <span class="match-fields">专业组代码</span>
             </div>
             <div>
                 <strong>比对2（招生计划 vs 院校分）：</strong><br>
@@ -643,6 +644,7 @@
                 <span class="match-fields info">学校</span>
                 <span class="match-fields info">科类</span>
                 <span class="match-fields info">批次</span>
+                <span class="match-fields info">专业组代码</span>
             </div>
         </div>
         
@@ -1093,7 +1095,7 @@
             }
         }
         
-        // 生成招生计划 vs 专业分的组合键
+        // 生成招生计划 vs 专业分的组合键（增加专业组代码）
         function generatePlanScoreKey(item) {
             const year = String(item['年份'] || '').trim();
             const province = String(item['省份'] || '').trim();
@@ -1102,19 +1104,21 @@
             const batch = String(item['批次'] || '').trim();
             const major = String(item['专业'] || '').trim();
             const level = String(item['层次'] || '').trim();
+            const groupCode = String(item['专业组代码'] || '').trim();
             
-            return `${year}|${province}|${school}|${subject}|${batch}|${major}|${level}`;
+            return `${year}|${province}|${school}|${subject}|${batch}|${major}|${level}|${groupCode}`;
         }
         
-        // 生成招生计划 vs 院校分的组合键
+        // 生成招生计划 vs 院校分的组合键（增加专业组代码）
         function generatePlanCollegeKey(item) {
             const year = String(item['年份'] || '').trim();
             const province = String(item['省份'] || '').trim();
             const school = String(item['学校'] || '').trim();
             const subject = String(item['科类'] || '').trim();
             const batch = String(item['批次'] || '').trim();
+            const groupCode = String(item['专业组代码'] || '').trim();
             
-            return `${year}|${province}|${school}|${subject}|${batch}`;
+            return `${year}|${province}|${school}|${subject}|${batch}|${groupCode}`;
         }
         
         // 比对1：招生计划 vs 专业分
@@ -1165,7 +1169,8 @@
                                 科类: item['科类'] || '',
                                 批次: item['批次'] || '',
                                 专业: item['专业'] || '',
-                                层次: item['层次'] || ''
+                                层次: item['层次'] || '',
+                                专业组代码: item['专业组代码'] || ''
                             },
                             exists: exists,
                             otherInfo: {
@@ -1173,7 +1178,6 @@
                                 学费: item['学费'] || '',
                                 学制: item['学制'] || '',
                                 专业代码: item['专业代码'] || '',
-                                专业组代码: item['专业组代码'] || '',
                                 招生代码: item['招生代码'] || '',
                                 数据来源: item['数据来源'] || '',
                                 备注: item['备注'] || '',
@@ -1272,7 +1276,8 @@
                                 省份: item['省份'] || '',
                                 学校: item['学校'] || '',
                                 科类: item['科类'] || '',
-                                批次: item['批次'] || ''
+                                批次: item['批次'] || '',
+                                专业组代码: item['专业组代码'] || ''
                             },
                             exists: exists,
                             otherInfo: {
@@ -1282,7 +1287,6 @@
                                 学费: item['学费'] || '',
                                 学制: item['学制'] || '',
                                 专业代码: item['专业代码'] || '',
-                                专业组代码: item['专业组代码'] || '',
                                 招生代码: item['招生代码'] || '',
                                 数据来源: item['数据来源'] || '',
                                 备注: item['备注'] || '',
@@ -1417,7 +1421,8 @@
                                             科类: item['科类'] || '',
                                             批次: item['批次'] || '',
                                             专业: item['专业'] || '',
-                                            层次: item['层次'] || ''
+                                            层次: item['层次'] || '',
+                                            专业组代码: item['专业组代码'] || ''
                                         },
                                         exists: exists,
                                         otherInfo: {
@@ -1425,7 +1430,6 @@
                                             学费: item['学费'] || '',
                                             学制: item['学制'] || '',
                                             专业代码: item['专业代码'] || '',
-                                            专业组代码: item['专业组代码'] || '',
                                             招生代码: item['招生代码'] || '',
                                             数据来源: item['数据来源'] || '',
                                             备注: item['备注'] || '',
@@ -1469,7 +1473,8 @@
                                             省份: item['省份'] || '',
                                             学校: item['学校'] || '',
                                             科类: item['科类'] || '',
-                                            批次: item['批次'] || ''
+                                            批次: item['批次'] || '',
+                                            专业组代码: item['专业组代码'] || ''
                                         },
                                         exists: exists,
                                         otherInfo: {
@@ -1479,7 +1484,6 @@
                                             学费: item['学费'] || '',
                                             学制: item['学制'] || '',
                                             专业代码: item['专业代码'] || '',
-                                            专业组代码: item['专业组代码'] || '',
                                             招生代码: item['招生代码'] || '',
                                             数据来源: item['数据来源'] || '',
                                             备注: item['备注'] || '',
@@ -1754,7 +1758,75 @@
             return level;
         }
         
-        // 转换选科要求 - 修复版：专门处理"必选"情况
+        // 提取必选科目（改进版）
+        function extractRequiredSubjects(text) {
+            const subjects = [];
+            const subjectMap = {
+                '物理': '物',
+                '化学': '化', 
+                '生物': '生',
+                '历史': '历',
+                '地理': '地',
+                '政治': '政',
+                '技术': '技'
+            };
+            
+            // 清理文本，移除括号内容以便更好地匹配
+            let cleanText = text.replace(/\([^)]*\)/g, '').trim();
+            
+            // 首先尝试提取"必选"前的科目
+            if (cleanText.includes('必选')) {
+                // 获取"必选"前面的部分
+                const beforeRequired = cleanText.split('必选')[0];
+                
+                // 尝试匹配多种分隔符：顿号、逗号、空格
+                const separators = ['、', '，', ',', ' '];
+                
+                // 尝试按分隔符分割
+                for (const sep of separators) {
+                    if (beforeRequired.includes(sep)) {
+                        const parts = beforeRequired.split(sep).filter(p => p.trim());
+                        for (const part of parts) {
+                            const trimmedPart = part.trim();
+                            for (const [fullName, shortName] of Object.entries(subjectMap)) {
+                                if (trimmedPart.includes(fullName) || fullName.includes(trimmedPart)) {
+                                    if (!subjects.includes(shortName)) {
+                                        subjects.push(shortName);
+                                    }
+                                }
+                            }
+                        }
+                        break; // 使用第一个匹配的分隔符
+                    }
+                }
+                
+                // 如果没有找到分隔符，尝试直接匹配整个字符串
+                if (subjects.length === 0) {
+                    for (const [fullName, shortName] of Object.entries(subjectMap)) {
+                        if (beforeRequired.includes(fullName)) {
+                            if (!subjects.includes(shortName)) {
+                                subjects.push(shortName);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 如果没有匹配到，尝试从整个文本中提取科目
+            if (subjects.length === 0) {
+                for (const [fullName, shortName] of Object.entries(subjectMap)) {
+                    if (cleanText.includes(fullName)) {
+                        if (!subjects.includes(shortName)) {
+                            subjects.push(shortName);
+                        }
+                    }
+                }
+            }
+            
+            return subjects;
+        }
+
+        // 转换选科要求 - 根据附件2示例优化
         function convertSelectionRequirement(groupRequirement, majorRequirement) {
             let selectionRequirement = '';
             let secondSubject = '';
@@ -1769,48 +1841,67 @@
                 return { selectionRequirement, secondSubject };
             }
             
-            // 首先检查是否包含"必选"关键词
-            if (requirement.includes('必选')) {
-                // 提取必选的科目
+            console.log('处理选科要求:', requirement);
+            
+            // 根据附件2示例处理各种情况
+            if (requirement.includes('不限') || requirement.includes('再选不限')) {
+                selectionRequirement = '不限科目专业组';
+            }
+            else if (requirement.includes('必选')) {
+                // 提取必选科目
                 const requiredSubjects = extractRequiredSubjects(requirement);
+                
+                console.log('提取的必选科目:', requiredSubjects);
                 
                 if (requiredSubjects.length > 0) {
                     selectionRequirement = '单科、多科均需选考';
                     secondSubject = requiredSubjects.join('');
-                    return { selectionRequirement, secondSubject };
+                }
+                
+                // 特殊处理：如果包含"首选"，可能需要排除首选科目
+                if (requirement.includes('首选')) {
+                    // 从必选科目中移除首选科目
+                    const preferredSubjects = [];
+                    if (requirement.includes('首选物理')) {
+                        preferredSubjects.push('物');
+                    }
+                    if (requirement.includes('首选历史')) {
+                        preferredSubjects.push('历');
+                    }
+                    
+                    // 从必选科目中移除首选科目
+                    const filteredSubjects = requiredSubjects.filter(sub => 
+                        !preferredSubjects.includes(sub)
+                    );
+                    
+                    if (filteredSubjects.length > 0) {
+                        secondSubject = filteredSubjects.join('');
+                    }
                 }
             }
-            
-            // 处理其他情况（原逻辑）
-            if (requirement.includes('不限') || requirement === '无') {
-                selectionRequirement = '不限科目专业组';
-            }
-            else if (requirement.includes('首选')) {
-                const secondSubjects = [];
+            else if (requirement.includes('首选') && requirement.includes('再选')) {
+                // 处理"首选物理，再选化学、生物"格式
+                const reSelectPart = requirement.split('再选')[1] || '';
+                const reSelectSubjects = extractRequiredSubjects(reSelectPart);
                 
-                if (requirement.includes('化学')) secondSubjects.push('化');
-                if (requirement.includes('生物')) secondSubjects.push('生');
-                if (requirement.includes('地理')) secondSubjects.push('地');
-                if (requirement.includes('政治')) secondSubjects.push('政');
-                
-                secondSubject = secondSubjects.join('');
-                
-                if (requirement.includes('选1') || requirement.includes('2选1') || requirement.includes('3选1') || requirement.includes('或')) {
-                    selectionRequirement = '多门选考';
-                } else if (secondSubjects.length > 0) {
+                if (reSelectSubjects.length > 0) {
                     selectionRequirement = '单科、多科均需选考';
+                    secondSubject = reSelectSubjects.join('');
                 }
             }
-            else if (requirement.includes('选1') || requirement.includes('或')) {
-                const subjects = extractSubjects(requirement);
+            else if (requirement.includes('或') || requirement.includes('选1')) {
+                // 处理多选一情况
+                const subjects = extractRequiredSubjects(requirement);
                 const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
-                secondSubject = filteredSubjects.join('');
+                
                 if (filteredSubjects.length > 0) {
                     selectionRequirement = '多门选考';
+                    secondSubject = filteredSubjects.join('');
                 }
             }
             else {
-                const subjects = extractSubjects(requirement);
+                // 默认处理
+                const subjects = extractRequiredSubjects(requirement);
                 if (subjects.length > 0) {
                     const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
                     secondSubject = filteredSubjects.join('');
@@ -1821,168 +1912,10 @@
                 }
             }
             
+            console.log('转换结果:', { selectionRequirement, secondSubject });
+            
             return { selectionRequirement, secondSubject };
         }
-        
-        // 提取必选科目
-        // 提取必选科目（改进版）
-function extractRequiredSubjects(text) {
-    const subjects = [];
-    const subjectMap = {
-        '物理': '物',
-        '化学': '化', 
-        '生物': '生',
-        '历史': '历',
-        '地理': '地',
-        '政治': '政',
-        '技术': '技'
-    };
-    
-    // 清理文本，移除括号内容以便更好地匹配
-    let cleanText = text.replace(/\([^)]*\)/g, '').trim();
-    
-    // 首先尝试提取"必选"前的科目
-    if (cleanText.includes('必选')) {
-        // 获取"必选"前面的部分
-        const beforeRequired = cleanText.split('必选')[0];
-        
-        // 尝试匹配多种分隔符：顿号、逗号、空格
-        const separators = ['、', '，', ',', ' '];
-        
-        // 尝试按分隔符分割
-        for (const sep of separators) {
-            if (beforeRequired.includes(sep)) {
-                const parts = beforeRequired.split(sep).filter(p => p.trim());
-                for (const part of parts) {
-                    const trimmedPart = part.trim();
-                    for (const [fullName, shortName] of Object.entries(subjectMap)) {
-                        if (trimmedPart.includes(fullName) || fullName.includes(trimmedPart)) {
-                            if (!subjects.includes(shortName)) {
-                                subjects.push(shortName);
-                            }
-                        }
-                    }
-                }
-                break; // 使用第一个匹配的分隔符
-            }
-        }
-        
-        // 如果没有找到分隔符，尝试直接匹配整个字符串
-        if (subjects.length === 0) {
-            for (const [fullName, shortName] of Object.entries(subjectMap)) {
-                if (beforeRequired.includes(fullName)) {
-                    if (!subjects.includes(shortName)) {
-                        subjects.push(shortName);
-                    }
-                }
-            }
-        }
-    }
-    
-    // 如果没有匹配到，尝试从整个文本中提取科目
-    if (subjects.length === 0) {
-        for (const [fullName, shortName] of Object.entries(subjectMap)) {
-            if (cleanText.includes(fullName)) {
-                if (!subjects.includes(shortName)) {
-                    subjects.push(shortName);
-                }
-            }
-        }
-    }
-    
-    return subjects;
-}
-
-// 转换选科要求 - 根据附件2示例优化
-function convertSelectionRequirement(groupRequirement, majorRequirement) {
-    let selectionRequirement = '';
-    let secondSubject = '';
-    
-    // 合并两个要求字段
-    let requirement = (groupRequirement || '') + (majorRequirement || '');
-    
-    // 清理特殊字符
-    requirement = requirement.replace(/^\^+/, '').replace(/\^+/g, '、').trim();
-    
-    if (!requirement || requirement === '' || requirement === '、') {
-        return { selectionRequirement, secondSubject };
-    }
-    
-    console.log('处理选科要求:', requirement);
-    
-    // 根据附件2示例处理各种情况
-    if (requirement.includes('不限') || requirement.includes('再选不限')) {
-        selectionRequirement = '不限科目专业组';
-    }
-    else if (requirement.includes('必选')) {
-        // 提取必选科目
-        const requiredSubjects = extractRequiredSubjects(requirement);
-        
-        console.log('提取的必选科目:', requiredSubjects);
-        
-        if (requiredSubjects.length > 0) {
-            selectionRequirement = '单科、多科均需选考';
-            secondSubject = requiredSubjects.join('');
-        }
-        
-        // 特殊处理：如果包含"首选"，可能需要排除首选科目
-        if (requirement.includes('首选')) {
-            // 从必选科目中移除首选科目
-            const preferredSubjects = [];
-            if (requirement.includes('首选物理')) {
-                preferredSubjects.push('物');
-            }
-            if (requirement.includes('首选历史')) {
-                preferredSubjects.push('历');
-            }
-            
-            // 从必选科目中移除首选科目
-            const filteredSubjects = requiredSubjects.filter(sub => 
-                !preferredSubjects.includes(sub)
-            );
-            
-            if (filteredSubjects.length > 0) {
-                secondSubject = filteredSubjects.join('');
-            }
-        }
-    }
-    else if (requirement.includes('首选') && requirement.includes('再选')) {
-        // 处理"首选物理，再选化学、生物"格式
-        const reSelectPart = requirement.split('再选')[1] || '';
-        const reSelectSubjects = extractRequiredSubjects(reSelectPart);
-        
-        if (reSelectSubjects.length > 0) {
-            selectionRequirement = '单科、多科均需选考';
-            secondSubject = reSelectSubjects.join('');
-        }
-    }
-    else if (requirement.includes('或') || requirement.includes('选1')) {
-        // 处理多选一情况
-        const subjects = extractRequiredSubjects(requirement);
-        const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
-        
-        if (filteredSubjects.length > 0) {
-            selectionRequirement = '多门选考';
-            secondSubject = filteredSubjects.join('');
-        }
-    }
-    else {
-        // 默认处理
-        const subjects = extractRequiredSubjects(requirement);
-        if (subjects.length > 0) {
-            const filteredSubjects = subjects.filter(sub => sub !== '物' && sub !== '历');
-            secondSubject = filteredSubjects.join('');
-            
-            if (filteredSubjects.length > 0) {
-                selectionRequirement = '单科、多科均需选考';
-            }
-        }
-    }
-    
-    console.log('转换结果:', { selectionRequirement, secondSubject });
-    
-    return { selectionRequirement, secondSubject };
-}
         
         // 提取科目简称
         function extractSubjects(text) {
@@ -2458,6 +2391,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                             <th width="80">批次</th>
                             <th width="150">专业</th>
                             <th width="80">层次</th>
+                            <th width="100">专业组代码</th>
                             <th width="100">招生人数</th>
                             <th width="100">匹配状态</th>
                         </tr>
@@ -2488,6 +2422,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                         <td>${fields.批次}</td>
                         <td title="${fields.专业}">${fields.专业.length > 10 ? fields.专业.substring(0, 10) + '...' : fields.专业}</td>
                         <td>${fields.层次}</td>
+                        <td>${fields.专业组代码 || '-'}</td>
                         <td>${result.otherInfo.招生人数 || '-'}</td>
                         <td>
                             <span class="${result.exists ? 'status-exists' : 'status-not-exists'}">
@@ -2527,6 +2462,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                             <th width="150">学校</th>
                             <th width="60">科类</th>
                             <th width="80">批次</th>
+                            <th width="100">专业组代码</th>
                             <th width="100">专业</th>
                             <th width="100">匹配状态</th>
                         </tr>
@@ -2555,6 +2491,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                         <td title="${fields.学校}">${fields.学校.length > 8 ? fields.学校.substring(0, 8) + '...' : fields.学校}</td>
                         <td>${fields.科类}</td>
                         <td>${fields.批次}</td>
+                        <td>${fields.专业组代码 || '-'}</td>
                         <td title="${result.otherInfo.专业}">${result.otherInfo.专业.length > 10 ? result.otherInfo.专业.substring(0, 10) + '...' : result.otherInfo.专业}</td>
                         <td>
                             <span class="${result.exists ? 'status-exists' : 'status-not-exists'}">
@@ -2607,6 +2544,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                     '批次': result.keyFields.批次,
                     '专业': result.keyFields.专业,
                     '层次': result.keyFields.层次,
+                    '专业组代码': result.keyFields.专业组代码,
                     '招生人数': result.otherInfo.招生人数,
                     '学费': result.otherInfo.学费,
                     '学制': result.otherInfo.学制,
@@ -2649,6 +2587,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                         '学校': result.keyFields.学校,
                         '科类': result.keyFields.科类,
                         '批次': result.keyFields.批次,
+                        '专业组代码': result.keyFields.专业组代码,
                         '专业': result.otherInfo.专业,
                         '层次': result.otherInfo.层次,
                         '招生人数': result.otherInfo.招生人数,
@@ -2695,6 +2634,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                         '批次': result.keyFields.批次,
                         '专业': result.keyFields.专业,
                         '层次': result.keyFields.层次,
+                        '专业组代码': result.keyFields.专业组代码,
                         '招生人数': result.otherInfo.招生人数,
                         '学费': result.otherInfo.学费,
                         '学制': result.otherInfo.学制,
@@ -2718,6 +2658,7 @@ function convertSelectionRequirement(groupRequirement, majorRequirement) {
                             '学校': result.keyFields.学校,
                             '科类': result.keyFields.科类,
                             '批次': result.keyFields.批次,
+                            '专业组代码': result.keyFields.专业组代码,
                             '专业': result.otherInfo.专业,
                             '层次': result.otherInfo.层次,
                             '招生人数': result.otherInfo.招生人数,
