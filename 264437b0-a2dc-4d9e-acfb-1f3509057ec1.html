@@ -1675,7 +1675,7 @@
             previewDiv.style.display = 'block';
         }
         
-        // 转换数据主函数（从第二个工具复制）
+        // 转换数据主函数
         function convertData(sourceData) {
             const converted = [];
             
@@ -1704,7 +1704,7 @@
                 // 处理首选科目：根据招生科类的第一个字
                 newRow['首选科目'] = getFirstSubject(row['科类']);
                 
-                // 处理选科要求 - 修复版：处理"必选"情况
+                // 处理选科要求 - 修改版：处理"物化生（3科必选）"或"物、化、生（3科必选）"格式
                 const { selectionRequirement, secondSubject } = 
                     convertSelectionRequirement(row['专业组选科要求'], row['专业选科要求(新高考专业省份)']);
                 
@@ -1758,8 +1758,10 @@
             return level;
         }
         
-        // 提取必选科目（改进版）
+        // 提取必选科目（改进版，处理"物化生（3科必选）"格式）
         function extractRequiredSubjects(text) {
+            if (!text) return [];
+            
             const subjects = [];
             const subjectMap = {
                 '物理': '物',
@@ -1771,53 +1773,61 @@
                 '技术': '技'
             };
             
-            // 清理文本，移除括号内容以便更好地匹配
-            let cleanText = text.replace(/\([^)]*\)/g, '').trim();
+            // 清理文本，保留中文和顿号、逗号
+            let cleanText = String(text).replace(/[^\u4e00-\u9fa5、，,]/g, '').trim();
             
-            // 首先尝试提取"必选"前的科目
-            if (cleanText.includes('必选')) {
-                // 获取"必选"前面的部分
-                const beforeRequired = cleanText.split('必选')[0];
+            // 处理"物化生（3科必选）"格式：直接提取括号前的科目
+            if (text.includes('必选') && text.includes('（') && text.indexOf('必选') > text.indexOf('（')) {
+                // 提取括号前的内容
+                const beforeBracket = text.split('（')[0];
+                cleanText = beforeBracket;
+            }
+            
+            // 处理"物、化、生（3科必选）"格式：顿号分隔的科目
+            if (cleanText.includes('、') || cleanText.includes('，') || cleanText.includes(',')) {
+                // 替换所有分隔符为逗号
+                const normalizedText = cleanText.replace(/[、，]/g, ',');
+                const parts = normalizedText.split(',').filter(p => p.trim());
                 
-                // 尝试匹配多种分隔符：顿号、逗号、空格
-                const separators = ['、', '，', ',', ' '];
-                
-                // 尝试按分隔符分割
-                for (const sep of separators) {
-                    if (beforeRequired.includes(sep)) {
-                        const parts = beforeRequired.split(sep).filter(p => p.trim());
-                        for (const part of parts) {
-                            const trimmedPart = part.trim();
-                            for (const [fullName, shortName] of Object.entries(subjectMap)) {
-                                if (trimmedPart.includes(fullName) || fullName.includes(trimmedPart)) {
-                                    if (!subjects.includes(shortName)) {
-                                        subjects.push(shortName);
-                                    }
-                                }
-                            }
-                        }
-                        break; // 使用第一个匹配的分隔符
-                    }
-                }
-                
-                // 如果没有找到分隔符，尝试直接匹配整个字符串
-                if (subjects.length === 0) {
+                for (const part of parts) {
+                    const trimmedPart = part.trim();
                     for (const [fullName, shortName] of Object.entries(subjectMap)) {
-                        if (beforeRequired.includes(fullName)) {
+                        if (trimmedPart.includes(fullName) || fullName.includes(trimmedPart)) {
                             if (!subjects.includes(shortName)) {
                                 subjects.push(shortName);
                             }
+                            break;
                         }
                     }
                 }
-            }
-            
-            // 如果没有匹配到，尝试从整个文本中提取科目
-            if (subjects.length === 0) {
+            } else {
+                // 处理"物化生"这样的连续字符串
+                // 先尝试匹配全名
                 for (const [fullName, shortName] of Object.entries(subjectMap)) {
                     if (cleanText.includes(fullName)) {
                         if (!subjects.includes(shortName)) {
                             subjects.push(shortName);
+                        }
+                    }
+                }
+                
+                // 如果没匹配到全名，尝试按字符匹配
+                if (subjects.length === 0 && cleanText.length > 0) {
+                    // 创建字符到简称的映射
+                    const charToShortMap = {
+                        '物': '物',
+                        '化': '化',
+                        '生': '生',
+                        '历': '历',
+                        '地': '地',
+                        '政': '政',
+                        '技': '技'
+                    };
+                    
+                    // 遍历每个字符
+                    for (const char of cleanText) {
+                        if (charToShortMap[char] && !subjects.includes(charToShortMap[char])) {
+                            subjects.push(charToShortMap[char]);
                         }
                     }
                 }
@@ -1848,7 +1858,7 @@
                 selectionRequirement = '不限科目专业组';
             }
             else if (requirement.includes('必选')) {
-                // 提取必选科目
+                // 处理"物化生（3科必选）"或"物、化、生（3科必选）"格式
                 const requiredSubjects = extractRequiredSubjects(requirement);
                 
                 console.log('提取的必选科目:', requiredSubjects);
@@ -1915,28 +1925,6 @@
             console.log('转换结果:', { selectionRequirement, secondSubject });
             
             return { selectionRequirement, secondSubject };
-        }
-        
-        // 提取科目简称
-        function extractSubjects(text) {
-            const subjects = [];
-            const subjectMap = {
-                '物理': '物',
-                '化学': '化',
-                '生物': '生',
-                '历史': '历',
-                '地理': '地',
-                '政治': '政',
-                '技术': '技'
-            };
-            
-            for (const [fullName, shortName] of Object.entries(subjectMap)) {
-                if (text.includes(fullName)) {
-                    subjects.push(shortName);
-                }
-            }
-            
-            return subjects;
         }
         
         // 转换为文本格式
