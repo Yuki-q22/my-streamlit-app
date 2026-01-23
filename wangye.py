@@ -2003,7 +2003,7 @@ def export_converted_data_to_excel(data, conversion_data, output_path):
 
 # ====================== tab7：招生计划工具======================
 with tab7:
-    st.header("🎓 招生计划数据比对与转换工具")
+    st.header("招生计划数据比对与转换工具")
     st.markdown("上传招生计划、专业分和院校分文件进行比对，导出未匹配数据为专业分格式")
     
     # 初始化session state
@@ -2058,7 +2058,7 @@ with tab7:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.subheader("📋 招生计划文件")
+        st.subheader("招生计划文件")
         plan_file = st.file_uploader("上传招生计划文件", type=["xlsx", "xls"], key="tab7_plan_file")
         if plan_file is not None:
             try:
@@ -2069,7 +2069,7 @@ with tab7:
                 st.error(f"❌ 文件读取失败: {str(e)}")
     
     with col2:
-        st.subheader("📊 专业分文件")
+        st.subheader("专业分文件")
         score_file = st.file_uploader("上传专业分文件", type=["xlsx", "xls"], key="tab7_score_file")
         if score_file is not None:
             try:
@@ -2080,7 +2080,7 @@ with tab7:
                 st.error(f"❌ 文件读取失败: {str(e)}")
     
     with col3:
-        st.subheader("🏫 院校分文件")
+        st.subheader("院校分文件")
         college_file = st.file_uploader("上传院校分文件", type=["xlsx", "xls"], key="tab7_college_file")
         if college_file is not None:
             try:
