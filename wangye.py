@@ -1034,18 +1034,31 @@ def images_to_pdf(image_paths, pdf_path):
     return False
 
 
-# ====================== 招生计划比对核心逻辑（从HTML迁移） ======================
 
 # ====================== 招生计划比对核心逻辑与特定模板导出 ======================
 
 def process_plan_comparison_logic(df_p, df_s, df_c):
-    """核心比对逻辑：生成匹配状态"""
-    # 清洗数据
-    df_p = df_p.astype(str).apply(lambda x: x.str.strip())
-    df_s = df_s.astype(str).apply(lambda x: x.str.strip())
-    df_c = df_c.astype(str).apply(lambda x: x.str.strip())
+    """核心比对逻辑：生成匹配状态，增加了列名兼容性"""
 
-    # 定义比对维度
+    # 自动列名映射：将用户可能的列名映射到标准列名
+    column_mapping = {
+        '批次': '招生批次',
+        '录取批次': '招生批次',
+        '专业名称': '招生专业',
+        '科类': '招生科类',
+        '层次': '一级层次'
+    }
+
+    for df in [df_p, df_s, df_c]:
+        # 清除列名首尾空格
+        df.columns = [str(c).strip() for c in df.columns]
+        # 自动更名
+        df.rename(columns=column_mapping, inplace=True)
+        # 统一转为字符串并去空格
+        for col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
+    # 标准比对维度（如果文件中不存在某列，会自动跳过该维度的比对）
     fields_s = ['年份', '省份', '学校名称', '招生科类', '招生批次', '招生专业', '一级层次', '专业组代码']
     fields_c = ['年份', '省份', '学校名称', '招生科类', '招生批次', '专业组代码']
 
@@ -1061,8 +1074,9 @@ def process_plan_comparison_logic(df_p, df_s, df_c):
     df_p['院校分状态'] = p_id_c.isin(c_ids).map({True: '已匹配', False: '未匹配'})
     return df_p
 
+
 def export_to_specific_template(df):
-    """复刻特定模板：A1-Y1大备注，A2-B2年份，第3行表头，第4行数据，并包含合并单元格"""
+    """导出符合要求的特定模板"""
     from openpyxl.styles import Alignment, PatternFill, Font
     import io
 
@@ -1070,7 +1084,7 @@ def export_to_specific_template(df):
     ws = wb.active
     ws.title = "招生数据比对结果"
 
-    # 1. 写入 A1-Y1 的合并单元格及超长备注
+    # 1. 写入 A1-Y1 的合并单元格及备注 (保持你要求的完整文本)
     ws.merge_cells('A1:Y1')
     note_text = (
         "备注：请删除示例后再填写；\n"
@@ -1094,10 +1108,12 @@ def export_to_specific_template(df):
     )
     ws['A1'] = note_text
     ws['A1'].alignment = Alignment(wrapText=True, vertical='top', horizontal='left')
-    ws.row_dimensions[1].height = 280  # 设置第一行行高以容纳文字
+    ws.row_dimensions[1].height = 250
 
     # 2. 写入 A2-B2 年份信息
-    year_val = str(df['年份'].iloc[0]) if '年份' in df.columns and not df.empty else "未知"
+    year_val = "未知"
+    if '年份' in df.columns and not df.empty:
+        year_val = str(df['年份'].iloc[0])
     ws['A2'] = "招生年份"
     ws['B2'] = year_val
     ws['A2'].alignment = Alignment(horizontal='center')
@@ -1116,24 +1132,23 @@ def export_to_specific_template(df):
         for col_idx, val in enumerate(row_vals, 1):
             ws.cell(row=row_idx, column=col_idx, value=val).alignment = Alignment(horizontal='center')
 
-    # 5. 合并单元格 (复刻逻辑：学校名称、省份、批次相同时自动合并)
-    merge_targets = ['学校名称', '省份', '招生批次']
-    for t_col in merge_targets:
-        if t_col in columns:
-            col_idx = columns.index(t_col) + 1
-            start_row = 4
+    # 5. 自动合并列（学校名称、省份、招生批次）
+    merge_cols = ['学校名称', '省份', '招生批次']
+    for m_col in merge_cols:
+        if m_col in columns:
+            idx = columns.index(m_col) + 1
+            start = 4
             for r in range(5, ws.max_row + 1):
-                if ws.cell(row=r, column=col_idx).value != ws.cell(row=r-1, column=col_idx).value:
-                    if r - 1 > start_row:
-                        ws.merge_cells(start_row=start_row, start_column=col_idx, end_row=r-1, end_column=col_idx)
-                    start_row = r
-            if ws.max_row > start_row:
-                ws.merge_cells(start_row=start_row, start_column=col_idx, end_row=ws.max_row, end_column=col_idx)
+                if ws.cell(row=r, column=idx).value != ws.cell(row=r - 1, column=idx).value:
+                    if r - 1 > start:
+                        ws.merge_cells(start_row=start, start_column=idx, end_row=r - 1, end_column=idx)
+                    start = r
+            if ws.max_row > start:
+                ws.merge_cells(start_row=start, start_column=idx, end_row=ws.max_row, end_column=idx)
 
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
-
 
 
 # ============================
@@ -1539,57 +1554,75 @@ with tab6:
             else:
                 st.warning("未抓取到任何图片")
 
-# ====================== 招生计划数据比对（原生集成版） ======================
-with tab7:  # 请确认您的tab索引
-    st.header("招生计划数据比对工具 ")
+# ====================== Streamlit 界面逻辑 (tab7) ======================
+with tab7:
+    st.header("📊 招生计划数据比对工具")
 
     c1, c2, c3 = st.columns(3)
-    with c1: u_p = st.file_uploader("上传：招生计划", type=["xlsx"], key="up_p")
-    with c2: u_s = st.file_uploader("上传：专业分", type=["xlsx"], key="up_s")
-    with c3: u_c = st.file_uploader("上传：院校分", type=["xlsx"], key="up_c")
+    with c1: u_p = st.file_uploader("上传：招生计划", type=["xlsx"], key="up_p_safe")
+    with c2: u_s = st.file_uploader("上传：专业分", type=["xlsx"], key="up_s_safe")
+    with c3: u_c = st.file_uploader("上传：院校分", type=["xlsx"], key="up_c_safe")
 
     if u_p and u_s and u_c:
-        @st.cache_data
-        def get_data(p, s, c):
-            return process_plan_comparison_logic(pd.read_excel(p), pd.read_excel(s), pd.read_excel(c))
+        try:
+            # 读取数据
+            df_p_raw = pd.read_excel(u_p)
+            df_s_raw = pd.read_excel(u_s)
+            df_c_raw = pd.read_excel(u_c)
 
-        full_df = get_data(u_p, u_s, u_c)
+            # 比对处理
+            full_df = process_plan_comparison_logic(df_p_raw, df_s_raw, df_c_raw)
 
-        # 筛选器
-        st.markdown("### 🎯 结果筛选")
-        f1, f2, f3, f4 = st.columns(4)
-        with f1:
-            s_prov = st.selectbox("省份", ["全部"] + sorted(full_df['省份'].unique().tolist()))
-        with f2:
-            s_batch = st.selectbox("批次", ["全部"] + sorted(full_df['招生批次'].unique().tolist()))
-        with f3:
-            s_match_s = st.selectbox("专业分状态", ["全部", "未匹配", "已匹配"])
-        with f4:
-            s_match_c = st.selectbox("院校分状态", ["全部", "未匹配", "已匹配"])
+            # --- 安全筛选器：检查列是否存在后再创建筛选器 ---
+            st.markdown("### 🎯 结果筛选")
+            f1, f2, f3, f4 = st.columns(4)
 
-        # 应用过滤
-        f_df = full_df.copy()
-        if s_prov != "全部": f_df = f_df[f_df['省份'] == s_prov]
-        if s_batch != "全部": f_df = f_df[f_df['招生批次'] == s_batch]
-        if s_match_s != "全部": f_df = f_df[f_df['专业分状态'] == s_match_s]
-        if s_match_c != "全部": f_df = f_df[f_df['院校分状态'] == s_match_c]
+            f_df = full_df.copy()
 
-        st.metric("筛选结果条数", len(f_df))
-        st.dataframe(f_df, use_container_width=True)
+            with f1:
+                col_name = '省份'
+                if col_name in f_df.columns:
+                    s_prov = st.selectbox("省份", ["全部"] + sorted(f_df[col_name].unique().tolist()))
+                    if s_prov != "全部": f_df = f_df[f_df[col_name] == s_prov]
+                else:
+                    st.warning("缺少'省份'列")
 
-        st.markdown("### 📥 数据导出")
-        e1, e2 = st.columns(2)
-        with e1:
-            exp_s = f_df[f_df['专业分状态'] == '未匹配'].drop(columns=['专业分状态', '院校分状态'])
-            if not exp_s.empty:
-                st.download_button("下载未匹配专业分 (格式化)", export_to_specific_template(exp_s), "未匹配专业分.xlsx")
-        with e2:
-            exp_c = f_df[f_df['院校分状态'] == '未匹配'].drop(columns=['专业分状态', '院校分状态'])
-            if not exp_c.empty:
-                st.download_button("下载未匹配院校分 (格式化)", export_to_specific_template(exp_c), "未匹配院校分.xlsx")
+            with f2:
+                col_name = '招生批次'
+                if col_name in f_df.columns:
+                    s_batch = st.selectbox("批次", ["全部"] + sorted(f_df[col_name].unique().tolist()))
+                    if s_batch != "全部": f_df = f_df[f_df[col_name] == s_batch]
+                else:
+                    st.warning("缺少'招生批次'列")
+
+            with f3:
+                s_match_s = st.selectbox("专业分状态", ["全部", "未匹配", "已匹配"])
+                if s_match_s != "全部": f_df = f_df[f_df['专业分状态'] == s_match_s]
+
+            with f4:
+                s_match_c = st.selectbox("院校分状态", ["全部", "未匹配", "已匹配"])
+                if s_match_c != "全部": f_df = f_df[f_df['院校分状态'] == s_match_c]
+
+            st.metric("筛选结果条数", len(f_df))
+            st.dataframe(f_df, use_container_width=True)
+
+            # --- 导出 ---
+            st.markdown("### 📥 数据导出")
+            e1, e2 = st.columns(2)
+            with e1:
+                exp_s = f_df[f_df['专业分状态'] == '未匹配'].drop(columns=['专业分状态', '院校分状态'])
+                if not exp_s.empty:
+                    st.download_button("下载未匹配专业分 (格式化)", export_to_specific_template(exp_s), "缺失专业分.xlsx")
+            with e2:
+                exp_c = f_df[f_df['院校分状态'] == '未匹配'].drop(columns=['专业分状态', '院校分状态'])
+                if not exp_c.empty:
+                    st.download_button("下载未匹配院校分 (格式化)", export_to_specific_template(exp_c), "缺失院校分.xlsx")
+
+        except Exception as e:
+            st.error(f"处理失败，原因: {e}")
+            st.info("请检查 Excel 文件列名是否包含：年份、省份、学校名称、招生批次、招生专业等。")
     else:
-        st.info("💡 请上传三份文件开始比对。系统将自动找出计划表中缺少的专业分或院校分记录。")
-
+        st.info("💡 请上传三份文件开始比对。")
 
 # 页脚
 st.markdown("---")
