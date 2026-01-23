@@ -1123,7 +1123,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "一分一段校验",
         "专业组代码匹配（可以用，需要检查！）",
         "就业质量报告图片提取",
-        "招生计划数据比对（HTML工具）"
+        "招生计划数据比对"
     ]
 )
 
@@ -1440,6 +1440,24 @@ with tab6:
             else:
                 st.warning("未抓取到任何图片")
 
+
+# ====================== tab7：招生计划工具======================
+with tab7:  # 假设您在原有基础上增加了一个 tab
+    st.header("招生计划数据比对与转换工具")
+
+    # 获取 HTML 文件的路径
+    html_file_path = resource_path("264437b0-a2dc-4d9e-acfb-1f3509057ec1.html")
+
+    try:
+        with open(html_file_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+
+        # 使用 components.html 渲染，设置足够的高度
+        # scrolling=True 允许组件内部滚动
+        components.html(html_content, height=800, scrolling=True)
+
+    except FileNotFoundError:
+        st.error("找不到 HTML 工具文件，请确保文件已上传并路径正确。")
 
 
 # 页脚
