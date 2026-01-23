@@ -17,6 +17,7 @@ import tempfile
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
+import io
 
 
 # ============================
@@ -975,12 +976,6 @@ def process_data(dfA, dfB):
 
 
  # ========== 就业质量报告图片提取 ==========
-import os
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
-from PIL import Image
-import io
 
 def fetch_images_static(url, output_folder):
     os.makedirs(output_folder, exist_ok=True)
@@ -1037,6 +1032,53 @@ def images_to_pdf(image_paths, pdf_path):
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
         return True
     return False
+
+
+# ====================== 招生计划数据比对逻辑 ======================
+
+def compare_plan_data(df_plan, df_score, df_college):
+    """
+    实现原HTML工具中的核心比对逻辑
+    """
+    # 统一转换为字符串并去除空格，防止匹配失败
+    df_plan = df_plan.astype(str).apply(lambda x: x.str.strip())
+    df_score = df_score.astype(str).apply(lambda x: x.str.strip())
+    df_college = df_college.astype(str).apply(lambda x: x.str.strip())
+
+    # 定义比对1字段（计划 vs 专业分）：年份, 省份, 学校名称, 招生科类, 招生批次, 招生专业, 一级层次, 专业组代码
+    fields1 = ['年份', '省份', '学校名称', '招生科类', '招生批次', '招生专业', '一级层次', '专业组代码']
+
+    # 定义比对2字段（计划 vs 院校分）：年份, 省份, 学校名称, 招生科类, 招生批次, 专业组代码
+    fields2 = ['年份', '省份', '学校名称', '招生科类', '招生批次', '专业组代码']
+
+    # 检查列是否存在，如果缺列则不参与拼接（增强容错）
+    def get_valid_fields(df, target_fields):
+        return [f for f in target_fields if f in df.columns]
+
+    f1_plan = get_valid_fields(df_plan, fields1)
+    f1_score = get_valid_fields(df_score, fields1)
+
+    f2_plan = get_valid_fields(df_plan, fields2)
+    f2_college = get_valid_fields(df_college, fields2)
+
+    # 生成特征指纹进行比对
+    df_plan['key1'] = df_plan[f1_plan].apply(lambda x: "|".join(x), axis=1)
+    score_keys = set(df_score[f1_score].apply(lambda x: "|".join(x), axis=1))
+
+    df_plan['key2'] = df_plan[f2_plan].apply(lambda x: "|".join(x), axis=1)
+    college_keys = set(df_college[f2_college].apply(lambda x: "|".join(x), axis=1))
+
+    # 执行匹配
+    df_plan['match_score'] = df_plan['key1'].isin(score_keys)
+    df_plan['match_college'] = df_plan['key2'].isin(college_keys)
+
+    # 提取未匹配项
+    unmatched_score = df_plan[df_plan['match_score'] == False].drop(
+        columns=['key1', 'key2', 'match_score', 'match_college'])
+    unmatched_college = df_plan[df_plan['match_college'] == False].drop(
+        columns=['key1', 'key2', 'match_score', 'match_college'])
+
+    return unmatched_score, unmatched_college
 
 
 
@@ -1445,22 +1487,69 @@ with tab6:
                 st.warning("未抓取到任何图片")
 
 # ====================== 招生计划数据比对（HTML原工具） ======================
-with tab7:
+with tab7:  # 确保这个索引对应您定义的 tab 列表
     st.header("招生计划数据比对与转换工具")
+    st.info("💡 此工具将对比【招生计划】与【专业分/院校分】的差异，支持导出未匹配的数据。")
 
-    html_path = "264437b0-a2dc-4d9e-acfb-1f3509057ec1.html"
+    # 1. 文件上传区
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        u_plan = st.file_uploader("📋 上传：招生计划", type=["xlsx"], key="u_plan")
+    with c2:
+        u_score = st.file_uploader("📊 上传：专业分", type=["xlsx"], key="u_score")
+    with c3:
+        u_college = st.file_uploader("🏫 上传：院校分", type=["xlsx"], key="u_college")
 
-    if not os.path.exists(html_path):
-        st.error("未找到 HTML 文件，请确认已将 HTML 文件放在与 wangye.py 同一目录下。")
+    if u_plan and u_score and u_college:
+        if st.button("🔍 开始执行比对"):
+            try:
+                df_p = pd.read_excel(u_plan)
+                df_s = pd.read_excel(u_score)
+                df_c = pd.read_excel(u_college)
+
+                unmatched_s, unmatched_c = compare_plan_data(df_p, df_s, df_c)
+
+                # 2. 结果展示区
+                res_col1, res_col2 = st.columns(2)
+
+                with res_col1:
+                    st.subheader("比对1：计划 vs 专业分")
+                    st.write(f"未匹配数量：`{len(unmatched_s)}` 条")
+                    st.dataframe(unmatched_s, use_container_width=True)
+
+                    if not unmatched_s.empty:
+                        # 转换并提供下载
+                        output_s = BytesIO()
+                        unmatched_s.to_excel(output_s, index=False)
+                        st.download_button(
+                            label="📥 下载未匹配数据（专业分格式）",
+                            data=output_s.getvalue(),
+                            file_name="未匹配_专业分格式.xlsx",
+                            mime="application/vnd.ms-excel"
+                        )
+
+                with res_col2:
+                    st.subheader("比对2：计划 vs 院校分")
+                    st.write(f"未匹配数量：`{len(unmatched_c)}` 条")
+                    st.dataframe(unmatched_c, use_container_width=True)
+
+                    if not unmatched_c.empty:
+                        output_c = BytesIO()
+                        unmatched_c.to_excel(output_c, index=False)
+                        st.download_button(
+                            label="📥 下载未匹配数据（院校分格式）",
+                            data=output_c.getvalue(),
+                            file_name="未匹配_院校分格式.xlsx",
+                            mime="application/vnd.ms-excel"
+                        )
+
+                st.success("比对完成！")
+                st.balloons()
+
+            except Exception as e:
+                st.error(f"比对失败，请确保上传的文件包含必要的字段（年份、省份、学校名称等）。报错信息：{e}")
     else:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-
-        components.html(
-            html_content,
-            height=1200,
-            scrolling=True
-        )
+        st.warning("请上传完整的三个 Excel 文件后再点击比对。")
 
 
 # 页脚
