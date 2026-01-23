@@ -18,6 +18,9 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from PIL import Image
 
+# 导入招生计划比对功能
+from plan_comparison_ui import render_ui as render_plan_comparison_ui
+
 
 # ============================
 # 初始化设置
@@ -1444,23 +1447,10 @@ with tab6:
             else:
                 st.warning("未抓取到任何图片")
 
-# ====================== 招生计划数据比对（HTML原工具） ======================
+# ====================== 招生计划数据比对 ======================
 with tab7:
-    st.header("招生计划数据比对与转换工具")
-
-    html_path = "264437b0-a2dc-4d9e-acfb-1f3509057ec1.html"
-
-    if not os.path.exists(html_path):
-        st.error("未找到 HTML 文件，请确认已将 HTML 文件放在与 wangye.py 同一目录下。")
-    else:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-
-        components.html(
-            html_content,
-            height=1200,
-            scrolling=True
-        )
+    # 调用招生计划比对UI模块
+    render_plan_comparison_ui()
 
 
 # 页脚
