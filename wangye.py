@@ -2123,7 +2123,7 @@ with tab4:
 
 # ====================== 专业组代码匹配 ======================
 with tab5:
-    st.header("专业组代码匹配（需要检查！）")
+    st.header("专业组代码匹配")
 
     # 初始化session state
     if 'match_result_df' not in st.session_state:
