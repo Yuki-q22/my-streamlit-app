@@ -83,6 +83,176 @@ def check_major_combo(major, level):
     return "匹配" if combo in VALID_MAJOR_COMBOS else "不匹配"
 
 
+def convert_selection_requirement_from_requirement(req):
+    """
+    依据上传文件中的报考要求转换为选科要求说明与次选科目（与 docx 规范一致）。
+    1. 报考要求：不限 → 选科要求说明：不限科目专业组，次选科目：空白
+    2. 报考要求仅为单个字（如"化""政"）→ 选科要求说明：单科、多科均需选考，次选科目=报考要求
+    3. 报考要求中包含"且"（如"物且化"、"物且化且生"）→ 选科要求说明：单科、多科均需选考，次选科目为去掉"且"
+    4. 报考要求中包含"或"（如"物或化"、"物或化或生"）→ 选科要求说明：多门选考，次选科目为去掉"或"
+    """
+    if pd.isna(req) or not str(req).strip():
+        return "不限科目专业组", ""
+    s = str(req).strip()
+    if "不限" in s:
+        return "不限科目专业组", ""
+    if len(s) == 1:
+        return "单科、多科均需选考", s
+    if "且" in s:
+        return "单科、多科均需选考", s.replace("且", "")
+    if "或" in s:
+        return "多门选考", s.replace("或", "")
+    return "", ""
+
+
+def _to_text(value):
+    """转换为文本格式（学业桥工具用）"""
+    if value is None or (value != 0 and not value):
+        return ''
+    text = str(value).lstrip('^').strip().lstrip("'")
+    return text
+
+
+def _get_first_subject(category):
+    """根据科类取首选科目（学业桥工具用）"""
+    if not category:
+        return ''
+    c = str(category)
+    if '物理类' in c or '物理' in c:
+        return '物'
+    if '历史类' in c or '历史' in c:
+        return '历'
+    return ''
+
+
+def _normalize_kele(kele):
+    """转换招生科类：物理→物理类，历史→历史类，其他科类直接返回。"""
+    if kele is None or (isinstance(kele, str) and not kele.strip()):
+        return ''
+    k = str(kele).strip()
+    if k == '物理':
+        return '物理类'
+    if k == '历史':
+        return '历史类'
+    return k
+
+
+# 专业组代码按省份转换：无专业组 / 招生代码+专业组编号 / 招生代码=专业组代码 / 招生代码+（专业组编号）
+PROVINCE_NO_GROUP = {'河北', '辽宁', '山东', '浙江', '重庆', '贵州', '青海', '新疆', '西藏'}
+PROVINCE_CODE_PLUS_GROUP = {'吉林'}   # 招生代码+专业组编号，如 320401、0200001
+PROVINCE_CODE_EQUALS_GROUP = {'湖北', '江苏', '上海', '海南', '天津'}  # 招生代码=专业组代码，如 320401
+
+
+def _convert_group_code_by_province(province, zhaosheng_code, group_no):
+    """
+    按省份转换专业组代码。
+    1. 河北、辽宁、山东、浙江、重庆、贵州、青海、新疆、西藏：无专业组代码，无需转换，返回空
+    2. 海南、吉林：招生代码+专业组编号（如 320401、0200001）
+    3. 湖北、江苏、上海、天津：招生代码=专业组代码（如 320401）
+    4. 其余省份：招生代码+（专业组编号）（如 3204（01）、0200（001））
+    """
+    p = (province or '').strip()
+    code = _to_text(zhaosheng_code or '')
+    group = _to_text(group_no or '')
+    if p in PROVINCE_NO_GROUP:
+        return ''
+    if p in PROVINCE_CODE_PLUS_GROUP:
+        return (code or '') + (group or '')
+    if p in PROVINCE_CODE_EQUALS_GROUP:
+        return code or ''
+    # 其余省份：招生代码+（专业组编号）
+    if not group:
+        return code or ''
+    return (code or '') + '（' + group + '）'
+
+
+# 学业桥上传文件从第一行（标题行）开始校验，必须包含以下字段
+XUEYEQIAO_UPLOAD_COLUMNS = [
+    '数据类型', '年份', '省份', '批次', '科类', '院校名称', '院校原始名称', '招生代码', '专业组编号',
+    '专业代码', '招生类型', '专业名称', '报考要求', '专业备注', '招生计划人数', '最低分', '最低位次',
+    '最高分', '平均分', '录取人数'
+]
+
+# 学业桥导出文件第3行标题列（与上传字段映射后的导出格式）
+XUEYEQIAO_EXPORT_HEADERS = [
+    '学校名称', '省份', '招生专业', '专业方向（选填）', '专业备注（选填）', '一级层次', '招生科类', '招生批次',
+    '招生类型（选填）', '最高分', '最低分', '平均分', '最低分位次（选填）', '招生人数（选填）', '数据来源',
+    '专业组代码', '首选科目', '选科要求', '次选科目', '专业代码', '招生代码',
+    '最低分数区间低', '最低分数区间高', '最低分数区间位次低', '最低分数区间位次高', '录取人数（选填）',
+    '修改后备注', '备注修改说明'
+]
+
+# 学业桥导出文件第1行合并单元格备注内容（A1-U1，行高220磅）
+XUEYEQIAO_EXPORT_NOTE = (
+    '备注：请删除示例后再填写；\n'
+    '1.省份：必须填写各省份简称，例如：北京、内蒙古，不能带有市、省、自治区、空格、特殊字符等\n'
+    '2.科类：浙江、上海限定"综合、艺术类、体育类"，内蒙古限定"文科、理科、蒙授文科、蒙授理科、艺术类、艺术文、艺术理、体育类、体育文、体育理、蒙授艺术、蒙授体育"，其他省份限定"文科、理科、艺术类、艺术文、艺术理、体育类、体育文、体育理"\n'
+    '3.批次：（以下为19年使用批次）\n'
+    '河北、内蒙古、吉林、江苏、安徽、福建、江西、河南、湖北、广西、重庆、四川、贵州、云南、西藏、陕西、甘肃、宁夏、新疆限定本科提前批、本科一批、本科二批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；\n'
+    '黑龙江、湖南、青海限定本科提前批、本科一批、本科二批、本科三批、专科提前批、专科批、国家专项计划本科批、地方专项计划本科批；\n'
+    '山西限定本科一批A段、本科一批B段、本科二批A段、本科二批B段、本科二批C段、专科批、国家专项计划本科批、地方专项计划本科批；\n'
+    '浙江限定普通类提前批、平行录取一段、平行录取二段、平行录取三段\n'
+    '4.招生人数：仅能填写数字\n'
+    '5.最高分、最低分、平均分：仅能填写数字，保留小数后两位，且三者顺序不能改变，最低分为必填项，其中艺术类和体育类分数为文化课分数\n'
+    '6.一级层次：限定"本科、专科（高职）"，该部分为招生专业对应的专业层次\n'
+    '7.最低分位次：仅能填写数字;\n'
+    '8.数据来源：必须限定——官方考试院、大红本数据、学校官网、销售、抓取、圣达信、优志愿、学业桥\n'
+    '9.选科要求：不限科目专业组;多门选考;单科、多科均需选考\n'
+    '10.选科科目必须是科目的简写（物、化、生、历、地、政、技）\n'
+    '11.2020北京、海南，17-19上海仅限制本科专业组代码必填\n'
+    '12.新八省首选科目必须选择（物理或历史）\n'
+    '13.分数区间仅限北京'
+)
+
+
+def map_upload_row_to_export(row):
+    """
+    将上传文件的一行映射为导出文件格式。
+    字段映射：学校名称←院校名称，招生专业←专业名称，招生科类←科类，专业组代码←专业组编号等；
+    首选科目由科类经 _get_first_subject 得到；选科要求、次选科目由报考要求经 convert_selection_requirement_from_requirement 转换。
+    """
+    new_row = {}
+    new_row['学校名称'] = row.get('院校名称', '') or ''
+    new_row['省份'] = row.get('省份', '') or ''
+    new_row['招生专业'] = row.get('专业名称', '') or ''
+    new_row['专业方向（选填）'] = row.get('专业方向（选填）', '') or ''
+    new_row['专业备注（选填）'] = row.get('专业备注', '') or ''
+    new_row['一级层次'] = row.get('一级层次', '') or ''
+    # 招生科类：物理→物理类，历史→历史类，其他直接转换
+    kele_raw = row.get('科类', '') or ''
+    new_row['招生科类'] = _normalize_kele(kele_raw)
+    new_row['招生批次'] = row.get('批次', '') or ''
+    new_row['招生类型（选填）'] = row.get('招生类型', '') or ''
+    new_row['最高分'] = row.get('最高分', '') or ''
+    new_row['最低分'] = row.get('最低分', '') or ''
+    new_row['平均分'] = row.get('平均分', '') or ''
+    new_row['最低分位次（选填）'] = row.get('最低位次', '') or ''
+    new_row['招生人数（选填）'] = row.get('招生计划人数', '') or ''
+    new_row['数据来源'] = row.get('数据来源', '') or ''
+    # 专业组代码按省份转换
+    province = row.get('省份', '') or ''
+    zhaosheng_code = row.get('招生代码', '') or ''
+    group_no = row.get('专业组编号', '') or row.get('专业组代码', '')
+    new_row['专业组代码'] = _convert_group_code_by_province(province, zhaosheng_code, group_no)
+    cat = row.get('科类', '') or ''
+    new_row['首选科目'] = _get_first_subject(cat)
+    req = row.get('报考要求', '') or ''
+    sel_desc, second = convert_selection_requirement_from_requirement(req)
+    new_row['选科要求'] = sel_desc
+    new_row['次选科目'] = second
+    new_row['专业代码'] = _to_text(row.get('专业代码', ''))
+    new_row['招生代码'] = _to_text(row.get('招生代码', ''))
+    new_row['最低分数区间低'] = row.get('最低分数区间低', '') or ''
+    new_row['最低分数区间高'] = row.get('最低分数区间高', '') or ''
+    new_row['最低分数区间位次低'] = row.get('最低分数区间位次低', '') or ''
+    new_row['最低分数区间位次高'] = row.get('最低分数区间位次高', '') or ''
+    new_row['录取人数（选填）'] = row.get('录取人数', '') or ''
+    # 修改后备注和备注修改说明放在最后两列
+    new_row['修改后备注'] = row.get('修改后备注', '') or ''
+    new_row['备注修改说明'] = row.get('备注检查结果', '') or ''
+    return new_row
+
+
 CUSTOM_WHITELIST = {
     "宏福校区", "沙河校区", "中外合作办学", "珠海校区", "江北校区", "津南校区", "开封校区",
     "联合办学", "校企合作", "合作办学", "威海校区", "深圳校区", "苏州校区", "平果校区",
@@ -261,25 +431,36 @@ def analyze_and_fix(text):
 
 
 def process_chunk(chunk):
-    """处理数据块"""
-    # 学校名称检查
-    if '学校名称' in chunk.columns:
-        chunk['学校匹配结果'] = chunk['学校名称'].apply(check_school_name)
+    """
+    处理数据块。支持上传文件列名与导出列名并存：
+    学校名称/院校名称、招生专业/专业名称、招生科类/科类、选科要求/报考要求。
+    选科转换逻辑与 docx 一致：不限/单字/且/或 → 选科要求说明、次选。
+    """
+    # 学校名称检查（支持 学校名称 或 院校名称）
+    school_col = '学校名称' if '学校名称' in chunk.columns else ('院校名称' if '院校名称' in chunk.columns else None)
+    if school_col:
+        chunk['学校匹配结果'] = chunk[school_col].apply(check_school_name)
 
-    # 专业匹配检查
-    if '招生专业' in chunk.columns and '一级层次' in chunk.columns:
+    # 专业匹配检查（支持 招生专业 或 专业名称，需有一级层次）
+    major_col = '招生专业' if '招生专业' in chunk.columns else ('专业名称' if '专业名称' in chunk.columns else None)
+    if major_col and '一级层次' in chunk.columns:
         chunk['招生专业匹配结果'] = chunk.apply(
-            lambda r: check_major_combo(r['招生专业'], r['一级层次']), axis=1)
+            lambda r: check_major_combo(r[major_col], r['一级层次']), axis=1)
 
-    # 备注处理 - 修改这部分
-    if '专业备注' in chunk.columns:
+    # 备注处理（支持 专业备注）
+    remark_col = None
+    for c in chunk.columns:
+        if '专业备注' in str(c):
+            remark_col = c
+            break
+    if remark_col is not None:
         def process_remark(remark):
             if pd.isna(remark) or not str(remark).strip():
                 return '无问题', ''
             fixed_text, issues = analyze_and_fix(remark)
             return '；'.join(issues) if issues else '无问题', fixed_text
 
-        chunk[['备注检查结果', '修改后备注']] = chunk['专业备注'].apply(
+        chunk[['备注检查结果', '修改后备注']] = chunk[remark_col].apply(
             lambda x: pd.Series(process_remark(x)))
 
     # 分数检查
@@ -287,30 +468,20 @@ def process_chunk(chunk):
     if all(col in chunk.columns for col in score_columns):
         chunk['分数检查结果'] = chunk.apply(check_score_consistency, axis=1)
 
-    # 选科要求处理
-    if '选科要求' in chunk.columns:
-        def proc_req(req):
-            if pd.isna(req) or not str(req).strip():
-                return ["", ""]
-            s = str(req).strip()
-            if "不限" in s:
-                return ["不限科目专业组", ""]
-            if len(s) == 1:
-                return ["单科、多科均需选考", s]
-            if "且" in s:
-                return ["单科、多科均需选考", s.replace("且", "")]
-            if "或" in s:
-                return ["多门选考", s.replace("或", "")]
-            return ["", ""]
+    # 选科要求处理：依据 docx，支持 选科要求 或 报考要求，统一用 convert_selection_requirement_from_requirement
+    req_col = '选科要求' if '选科要求' in chunk.columns else ('报考要求' if '报考要求' in chunk.columns else None)
+    if req_col:
+        chunk[['选科要求说明', '次选']] = chunk[req_col].apply(
+            lambda x: pd.Series(convert_selection_requirement_from_requirement(x)))
 
-        chunk[['选科要求说明', '次选']] = chunk['选科要求'].apply(
-            lambda x: pd.Series(proc_req(x)))
-
-    # 招生科类处理
-    if '招生科类' in chunk.columns:
-        chunk['招生科类'] = chunk['招生科类'].replace({'物理': '物理类', '历史': '历史类'})
+    # 招生科类处理（支持 招生科类 或 科类），统一为物理类/历史类并生成首选科目
+    cat_col = '招生科类' if '招生科类' in chunk.columns else ('科类' if '科类' in chunk.columns else None)
+    if cat_col:
+        chunk['招生科类'] = chunk[cat_col].replace({'物理': '物理类', '历史': '历史类'})
         chunk['首选科目'] = chunk['招生科类'].apply(
-            lambda x: str(x)[0] if x in ['物理类', '历史类'] else "")
+            lambda x: _get_first_subject(x) if pd.notna(x) and str(x).strip() else '')
+    elif '首选科目' not in chunk.columns and req_col:
+        chunk['首选科目'] = ''
 
     return chunk
 
@@ -583,28 +754,36 @@ def process_score_file(file_path):
 # ============================
 # 保持文本格式
 # ============================
+def _find_remark_column(df):
+    """在 DataFrame 中查找专业备注相关列（上传多为“专业备注”，新文件多为“专业备注（选填）”）"""
+    for col in df.columns:
+        c = str(col).strip() if col is not None else ""
+        if not c:
+            continue
+        if c in ("专业备注", "专业备注（选填）") or "专业备注" in c:
+            return col
+    return None
+
+
 def process_remarks_file(file_path, progress_callback=None):
+    """学业桥数据处理：上传文件第1行为标题，校验指定列；校对学校/专业/备注后按新格式导出。"""
     try:
-        # 读取文件时，确保这些字段始终以字符串格式读取
-        df = pd.read_excel(file_path, header=2, dtype={
-            '专业组代码': str,
-            '专业代码': str,
+        # 上传文件从第一行（标题行）开始读取
+        df = pd.read_excel(file_path, header=0, dtype={
             '招生代码': str,
-        }, engine='openpyxl')
+            '专业组编号': str,
+            '专业代码': str,
+        }, engine='openpyxl', keep_default_na=False)
     except Exception as e:
         raise Exception(f"读取文件错误：{e}")
-    for col in ['专业组代码', '专业代码', '招生代码']:
+    # 校验必须包含的列（学业桥上传格式）
+    missing = [c for c in XUEYEQIAO_UPLOAD_COLUMNS if c not in df.columns]
+    if missing:
+        raise Exception("上传文件缺少以下列（应从第1行标题开始）：%s。当前列名：%s" % (missing, list(df.columns)))
+    for col in ['招生代码', '专业组编号', '专业代码']:
         if col in df.columns:
             df[col] = df[col].astype(str)
-    target_col = None
-    for col in df.columns:
-        if "专业备注" in str(col):
-            target_col = col
-            break
-    if not target_col:
-        raise Exception("未找到'专业备注'相关列")
-    if target_col != '专业备注':
-        df = df.rename(columns={target_col: '专业备注'})
+    # 专业备注列已在上传列中，无需再查找或重命名
     chunks = []
     for i in range(0, len(df), 1000):
         chunks.append(df.iloc[i:i + 1000].copy())
@@ -619,24 +798,74 @@ def process_remarks_file(file_path, progress_callback=None):
                 progress_callback(count + 1, total_chunks)
     ordered_results = [results[i] for i in sorted(results.keys())]
     final_result = pd.concat(ordered_results)
+    # 从上传数据取招生年份（年份列第一个非空值）
+    year_value = ''
+    if '年份' in final_result.columns:
+        for v in final_result['年份']:
+            if pd.notna(v) and str(v).strip():
+                year_value = str(v).strip()
+                break
+    # 将每一行映射为导出格式（含 process_chunk 产生的修改后备注等）
+    export_rows = []
+    for _, row in final_result.iterrows():
+        export_rows.append(map_upload_row_to_export(row.to_dict()))
+    export_df = pd.DataFrame(export_rows, columns=XUEYEQIAO_EXPORT_HEADERS)
+    # 最高分、最低分、平均分：仅数字保留小数后两位
+    def _format_score(x):
+        if x is None or (isinstance(x, str) and not x.strip()):
+            return ''
+        s = str(x).strip()
+        if not s or not _is_numeric_str(s):
+            return s
+        return '%.2f' % float(s)
+    for col in ['最高分', '最低分', '平均分']:
+        if col in export_df.columns:
+            export_df[col] = export_df[col].apply(_format_score)
     output_path = file_path.replace('.xlsx', '_检查结果.xlsx')
     try:
-        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            final_result.to_excel(writer, index=False)
-            workbook = writer.book
-            worksheet = writer.sheets['Sheet1']
-            # 保持指定列从第三行开始文本格式
-            for col in ['专业组代码', '专业代码', '招生代码']:
-                if col in final_result.columns:
-                    col_idx = final_result.columns.get_loc(col) + 1  # 转换为Excel列号（A=1）
-                    # 从第三行开始设置格式（Excel行号为3，对应Python的索引为2）
-                    for row in range(3, len(final_result) + 2):  # 工作表行号从3开始（索引2）
-                        cell = worksheet.cell(row=row, column=col_idx)
-                        cell.value = final_result.iloc[row - 3][col]  # 数据从第三行开始填充
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Sheet1'
+        # 第1行：A1-U1 合并，行高 220 磅，备注内容
+        ws.merge_cells('A1:U1')
+        ws['A1'] = XUEYEQIAO_EXPORT_NOTE
+        ws['A1'].alignment = Alignment(wrap_text=True, vertical='top', horizontal='left')
+        ws.row_dimensions[1].height = 220
+        # 第2行：A2=招生年份，B2=年份
+        ws['A2'] = '招生年份'
+        ws['B2'] = year_value
+        # 第3行：标题行
+        for col_idx, col_name in enumerate(XUEYEQIAO_EXPORT_HEADERS, start=1):
+            ws.cell(row=3, column=col_idx, value=col_name)
+        # 第4行起：数据
+        for row_idx, (_, row_data) in enumerate(export_df.iterrows(), start=4):
+            for col_idx, col_name in enumerate(XUEYEQIAO_EXPORT_HEADERS, start=1):
+                val = row_data.get(col_name)
+                if pd.isna(val):
+                    val = ''
+                ws.cell(row=row_idx, column=col_idx, value=val)
+        # 专业组代码、专业代码、招生代码等列为文本格式
+        text_cols = ['专业组代码', '专业代码', '招生代码', '最低分位次（选填）', '招生人数（选填）', '最低分数区间低', '最低分数区间高', '最低分数区间位次低', '最低分数区间位次高', '录取人数（选填）']
+        for col_name in text_cols:
+            if col_name in XUEYEQIAO_EXPORT_HEADERS:
+                col_idx = XUEYEQIAO_EXPORT_HEADERS.index(col_name) + 1
+                for r in range(4, len(export_df) + 4):
+                    cell = ws.cell(row=r, column=col_idx)
+                    if cell.value is not None and str(cell.value).strip() != '':
                         cell.number_format = numbers.FORMAT_TEXT
+        wb.save(output_path)
     except Exception as e:
         raise Exception(f"保存文件错误：{e}")
     return output_path
+
+
+def _is_numeric_str(s):
+    """判断字符串是否为数字（含小数）"""
+    try:
+        float(s)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 # ============================
