@@ -3428,7 +3428,7 @@ with tab7:
 
             with col3:
                 if len(all_unmatched_results) > 0:
-                    if st.button("⭐ 导出未匹配数据为院校分格式", type="primary", use_container_width=True):
+                    if st.button("⭐ 导出院校分格式数据", type="primary", use_container_width=True):
                         try:
                             # 提取原始数据（去重，因为同一个记录可能在比对1和比对2中都未匹配）
                             seen_indices = set()
@@ -3450,7 +3450,7 @@ with tab7:
                                 st.download_button(
                                     "📥 下载转换后的院校分数据",
                                     f.read(),
-                                    file_name=f"院校分数据_未匹配数据_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                    file_name=f"院校分数据{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                 )
 
