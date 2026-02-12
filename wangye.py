@@ -3483,7 +3483,7 @@ with tab7:
                                 )
 
                             os.remove(temp_path)
-                            st.success(f"转换完成！共转换 {len(converted_data)} 条数据（已去重）")
+                            st.success(f"转换完成！共转换 {len(minimal_export)} 条数据（已去重）")
                         except Exception as e:
                             st.error(f"转换失败: {str(e)}")
                 else:
