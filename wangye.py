@@ -3448,14 +3448,23 @@ with tab7:
                 if len(all_unmatched_results) > 0:
                     if st.button("⭐ 导出未匹配数据为专业分格式", type="primary", use_container_width=True):
                         try:
-                            # 提取原始数据（去重，因为同一个记录可能在比对1和比对2中都未匹配）
-                            seen_indices = set()
+                            # 提取真正未匹配的原始数据：
+                            # - 若两个比对都已执行，则只导出在两次比对中均未匹配的记录（交集）
+                            # - 若仅执行其中一次比对，则导出该次比对未匹配的记录
+                            plan_score_unmatched = set(r['originalIndex'] for r in st.session_state.plan_score_results if not r['exists']) if len(st.session_state.plan_score_results) > 0 else set()
+                            plan_college_unmatched = set(r['originalIndex'] for r in st.session_state.plan_college_results if not r['exists']) if len(st.session_state.plan_college_results) > 0 else set()
+
+                            if plan_score_unmatched and plan_college_unmatched:
+                                target_indices = plan_score_unmatched & plan_college_unmatched
+                            elif plan_score_unmatched:
+                                target_indices = plan_score_unmatched
+                            else:
+                                target_indices = plan_college_unmatched
+
+                            # 去重并按原序输出
                             conversion_data = []
-                            for r in all_unmatched_results:
-                                original_idx = r['originalIndex']
-                                if original_idx not in seen_indices:
-                                    seen_indices.add(original_idx)
-                                    conversion_data.append(st.session_state.plan_data.iloc[original_idx].to_dict())
+                            for idx in sorted(target_indices):
+                                conversion_data.append(st.session_state.plan_data.iloc[idx].to_dict())
 
                             # 仅提取指定字段并导出为专业分简化格式
                             minimal_export = []
