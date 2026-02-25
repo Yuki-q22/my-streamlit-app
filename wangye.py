@@ -3466,22 +3466,11 @@ with tab7:
                             for idx in sorted(target_indices):
                                 conversion_data.append(st.session_state.plan_data.iloc[idx].to_dict())
 
-                            # 仅提取指定字段并导出为专业分简化格式
-                            minimal_export = []
-                            for row in conversion_data:
-                                minimal_export.append({
-                                    '年份': row.get('年份', ''),
-                                    '省份': row.get('省份', ''),
-                                    '学校': row.get('学校', row.get('学校名称', row.get('院校名称', ''))),
-                                    '科类': row.get('科类', row.get('招生科类', '')),
-                                    '批次': row.get('批次', ''),
-                                    '专业': row.get('专业', row.get('专业名称', row.get('招生专业', ''))),
-                                    '层次': row.get('层次', row.get('一级层次', '')),
-                                    '专业组代码': row.get('专业组代码', row.get('专业组编号', ''))
-                                })
+                            # 转换为完整的专业分格式
+                            converted_data = convert_data(conversion_data)
 
-                            temp_path = "temp_unmatched_major.xlsx"
-                            export_unmatched_major_format(minimal_export, temp_path)
+                            temp_path = "temp_converted.xlsx"
+                            export_converted_data_to_excel(converted_data, conversion_data, temp_path)
 
                             with open(temp_path, 'rb') as f:
                                 st.download_button(
@@ -3492,7 +3481,7 @@ with tab7:
                                 )
 
                             os.remove(temp_path)
-                            st.success(f"转换完成！共转换 {len(minimal_export)} 条数据（已去重）")
+                            st.success(f"转换完成！共转换 {len(converted_data)} 条数据（已去重）")
                         except Exception as e:
                             st.error(f"转换失败: {str(e)}")
                 else:
