@@ -752,7 +752,7 @@ def process_score_file(file_path):
 
 
 # ============================
-# 保持文本格式
+# 备注招生类型提取
 # ============================
 def _find_remark_column(df):
     """在 DataFrame 中查找专业备注相关列（上传多为“专业备注”，新文件多为“专业备注（选填）”）"""
@@ -764,6 +764,152 @@ def _find_remark_column(df):
             return col
     return None
 
+
+DEFAULT_REMARK_TYPE_MAPPING = [
+    {"备注查找字段": "中外合作", "输出招生类型": "中外合作", "优先级": 1},
+    {"备注查找字段": "中外高水平大学生交流计划", "输出招生类型": "中外高水平大学生交流计划", "优先级": 2},
+    {"备注查找字段": "学分互认联合培养项目", "输出招生类型": "学分互认联合培养项目", "优先级": 3},
+    {"备注查找字段": "地方专项", "输出招生类型": "地方专项", "优先级": 4},
+    {"备注查找字段": "国家专项", "输出招生类型": "国家专项", "优先级": 5},
+    {"备注查找字段": "高校专项", "输出招生类型": "高校专项", "优先级": 6},
+    {"备注查找字段": "艺术类", "输出招生类型": "艺术类", "优先级": 7},
+    {"备注查找字段": "闽台合作", "输出招生类型": "闽台合作", "优先级": 8},
+    {"备注查找字段": "预科", "输出招生类型": "预科", "优先级": 9},
+    {"备注查找字段": "定向", "输出招生类型": "定向", "优先级": 10},
+    {"备注查找字段": "护理类", "输出招生类型": "护理类", "优先级": 11},
+    {"备注查找字段": "民族班", "输出招生类型": "民族班", "优先级": 12},
+    {"备注查找字段": "联合办学", "输出招生类型": "联合办学", "优先级": 13},
+    {"备注查找字段": "联办", "输出招生类型": "联办", "优先级": 14},
+    {"备注查找字段": "建档立卡专项", "输出招生类型": "建档立卡专项", "优先级": 15},
+    {"备注查找字段": "藏区专项", "输出招生类型": "藏区专项", "优先级": 16},
+    {"备注查找字段": "少数民族紧缺人才培养专项", "输出招生类型": "少数民族紧缺人才培养专项", "优先级": 17},
+    {"备注查找字段": "民语类及对等培养", "输出招生类型": "民语类及对等培养", "优先级": 18},
+    {"备注查找字段": "备注", "输出招生类型": "备注", "优先级": 19},
+    {"备注查找字段": "备注", "输出招生类型": "备注", "优先级": 20},
+    {"备注查找字段": "备注", "输出招生类型": "备注", "优先级": 21},
+    {"备注查找字段": "备注", "输出招生类型": "备注", "优先级": 22},
+    {"备注查找字段": "备注", "输出招生类型": "备注", "优先级": 23},
+]
+DEFAULT_REMARK_TYPE_MAPPING_TEXT = "备注查找字段\t输出招生类型\t优先级\n" + "\n".join(
+    [f"{item['备注查找字段']}\t{item['输出招生类型']}\t{item['优先级']}" for item in DEFAULT_REMARK_TYPE_MAPPING]
+)
+EXCLUSION_KEYWORDS = ["除了", "不含", "除外", "没有", "除"]
+
+
+def get_default_remark_type_mapping_df():
+    return pd.DataFrame(DEFAULT_REMARK_TYPE_MAPPING)
+
+
+def parse_recruitment_type_mapping_text(text):
+    mappings = []
+    for line in str(text).splitlines():
+        if not line.strip():
+            continue
+        parts = [p.strip() for p in re.split(r'[\t|]+', line) if p.strip()]
+        if len(parts) < 2:
+            continue
+        remark_key = parts[0]
+        output_type = parts[1]
+        priority = None
+        if len(parts) >= 3:
+            try:
+                priority = int(parts[2])
+            except ValueError:
+                priority = None
+        mappings.append({
+            '备注查找字段': remark_key,
+            '输出招生类型': output_type,
+            '优先级': priority
+        })
+    return mappings
+
+
+def normalize_remark_type_mappings(mapping_df):
+    mappings = []
+    for _, row in mapping_df.iterrows():
+        remark_key = str(row.get('备注查找字段', '') or '').strip()
+        output_type = str(row.get('输出招生类型', '') or '').strip()
+        priority = row.get('优先级', None)
+        if not remark_key or not output_type:
+            continue
+        try:
+            priority = int(priority)
+        except Exception:
+            priority = None
+        mappings.append({
+            '备注查找字段': remark_key,
+            '输出招生类型': output_type,
+            '优先级': priority
+        })
+    mappings.sort(key=lambda item: (item['优先级'] is None, item['优先级'] if item['优先级'] is not None else 9999))
+    return mappings
+
+
+def extract_recruitment_type(remark, mappings):
+    if pd.isna(remark) or not str(remark).strip():
+        return ''
+    remark_text = str(remark)
+    for item in mappings:
+        if item['备注查找字段'] and item['备注查找字段'] in remark_text:
+            return item['输出招生类型']
+    return ''
+
+
+def remark_needs_review(remark):
+    if pd.isna(remark) or not str(remark).strip():
+        return '否'
+    remark_text = str(remark)
+    return '是' if any(word in remark_text for word in EXCLUSION_KEYWORDS) else '否'
+
+
+def process_remark_type_file(file_path, remark_col, mappings, progress_callback=None):
+    try:
+        df = pd.read_excel(file_path, header=0, keep_default_na=False)
+    except Exception as e:
+        raise Exception(f"读取文件错误：{e}")
+
+    if remark_col not in df.columns:
+        raise Exception(f"备注字段 {remark_col} 不存在于文件中")
+
+    result_df = pd.DataFrame({
+        '备注': df[remark_col].apply(lambda x: '' if pd.isna(x) else str(x)),
+        '招生类型': df[remark_col].apply(lambda x: extract_recruitment_type(x, mappings)),
+        '需要核查': df[remark_col].apply(remark_needs_review)
+    })
+
+    output_path = os.path.splitext(file_path)[0] + '_备注提取结果.xlsx'
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Sheet1'
+
+        headers = ['备注', '招生类型', '需要核查']
+        for col_idx, header in enumerate(headers, start=1):
+            ws.cell(row=1, column=col_idx, value=header)
+
+        for row_idx, (_, row_data) in enumerate(result_df.iterrows(), start=2):
+            ws.cell(row=row_idx, column=1, value=row_data['备注'])
+            ws.cell(row=row_idx, column=2, value=row_data['招生类型'])
+            ws.cell(row=row_idx, column=3, value=row_data['需要核查'])
+
+        for col_idx in range(1, 4):
+            for row_idx in range(2, len(result_df) + 2):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                if cell.value is not None and str(cell.value).strip() != '':
+                    cell.number_format = numbers.FORMAT_TEXT
+
+        wb.save(output_path)
+    except Exception as e:
+        raise Exception(f"保存文件错误：{e}")
+
+    if progress_callback:
+        progress_callback(1, 1)
+    return output_path
+
+
+# ============================
+# 学业桥数据处理
+# ============================
 
 def process_remarks_file(file_path, progress_callback=None):
     """学业桥数据处理：上传文件第1行为标题，校验指定列；校对学校/专业/备注后按新格式导出。"""
@@ -2170,12 +2316,10 @@ with st.expander("📌 功能说明", expanded=True):
     """)
 
 # 更新日志对话框
-with st.expander("📢 版本更新（2026.1.27更新）（必看！）", expanded=False):
+with st.expander("📢 版本更新（2026.4.8更新）（必看！）", expanded=False):
     st.markdown("""
-    ### 2026.1.27更新
-    • 修改了专业分匹配逻辑（“学校-省份-层次-科类-批次”），重复字段及未匹配到的内容需要手动补充
-
-    • 修改了招生计划数据对比逻辑（需检查无专业组代码的省份的选科要求）
+    ### 2026.4.8更新
+    • 新增了“备注招生类型提取”功能，可以从备注列中按自定义优先级提取招生类型，并标记包含“除了、不含、除外、没有”的记录
 
     ### 历史更新
 
@@ -2232,12 +2376,17 @@ with st.expander("📢 版本更新（2026.1.27更新）（必看！）", expand
     ### 2025.9.26更新
     • 更新了院校分中最高分的提取逻辑  
     • 新增了艺体类院校分提取功能，可以直接上传艺体类专业分模板（可把特殊类型<如：中外合作办学>的备注在专业分中放到专业方向再提取）
+                
+               
+    ### 2026.1.27更新
+    • 修改了专业分匹配逻辑（“学校-省份-层次-科类-批次”），重复字段及未匹配到的内容需要手动补充
+    • 修改了招生计划数据对比逻辑（需检查无专业组代码的省份的选科要求）
 
 
     """)
 
 # 创建选项卡
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
     [
         "院校分提取（普通类）",
         "院校分提取（艺体类）",
@@ -2245,7 +2394,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "一分一段校验",
         "专业组代码匹配",
         "就业质量报告图片提取",
-        "招生计划数据比对"
+        "招生计划数据比对",
+        "备注招生类型提取"
     ]
 )
 
@@ -2949,7 +3099,6 @@ with tab6:
 
 
 
-
 # ====================== tab7：招生计划工具======================
 with tab7:
     st.header("招生计划数据比对与转换工具")
@@ -3531,6 +3680,105 @@ with tab7:
                             st.error(traceback.format_exc())
                 else:
                     st.info("暂无未匹配数据")
+
+
+# ====================== 备注招生类型提取 ======================
+with tab8:
+    st.header("备注招生类型提取")
+    
+    st.markdown(
+        "❗️使用方法：先填写映射规则，生成预览；再上传文件并开始提取。"
+    )
+
+    if 'remark_mapping_text' not in st.session_state:
+        st.session_state.remark_mapping_text = DEFAULT_REMARK_TYPE_MAPPING_TEXT
+    if 'remark_mappings' not in st.session_state:
+        st.session_state.remark_mappings = []
+    if 'remark_mapping_error' not in st.session_state:
+        st.session_state.remark_mapping_error = ''
+
+    col_left, col_right = st.columns([2, 1])
+    with col_left:
+        st.subheader("1. 填写映射规则")
+        with st.form("remark_mapping_form"):
+            st.text_area(
+                "映射规则内容（每行一条，字段用制表符或竖线分隔）：备注查找字段\t输出招生类型\t优先级",
+                value=st.session_state.remark_mapping_text,
+                height=260,
+                key="remark_mapping_text_input"
+            )
+            
+            parse_clicked = st.form_submit_button("生成映射预览")
+
+        if parse_clicked:
+            st.session_state.remark_mapping_text = st.session_state.remark_mapping_text_input
+            mapping_df = pd.DataFrame(parse_recruitment_type_mapping_text(st.session_state.remark_mapping_text)) if st.session_state.remark_mapping_text else pd.DataFrame([])
+            st.session_state.remark_mappings = normalize_remark_type_mappings(mapping_df)
+            if not st.session_state.remark_mappings:
+                st.session_state.remark_mapping_error = "当前未解析到有效映射规则，请检查格式是否为：备注查找字段  输出招生类型  优先级"
+            else:
+                st.session_state.remark_mapping_error = ''
+
+    with col_right:
+        st.subheader("2. 映射规则预览")
+        if st.session_state.remark_mappings:
+            st.dataframe(pd.DataFrame(st.session_state.remark_mappings), use_container_width=True)
+        elif st.session_state.remark_mapping_error:
+            st.warning(st.session_state.remark_mapping_error)
+        else:
+            st.info("请点击“生成映射预览”查看规则表格。")
+
+    st.markdown("---")
+    st.subheader("3. 上传备注文件并提取招生类型")
+    uploaded_file = st.file_uploader("选择Excel文件", type=["xls", "xlsx"], key="remark_type_file")
+    if uploaded_file is not None:
+        uploaded_bytes = uploaded_file.getvalue()
+        try:
+            df = pd.read_excel(BytesIO(uploaded_bytes), header=0, keep_default_na=False)
+        except Exception as e:
+            st.error(f"读取文件失败：{e}")
+            df = None
+        if df is not None:
+            columns = list(df.columns)
+            if not columns:
+                st.warning("上传文件未检测到列名，请检查文件格式")
+            else:
+                default_index = 0
+                for idx, col in enumerate(columns):
+                    if "备注" in str(col):
+                        default_index = idx
+                        break
+                remark_col = st.selectbox("备注查找字段", options=columns, index=default_index)
+
+                if st.button("开始提取招生类型", key="process_remark_type"):
+                    if not st.session_state.remark_mappings:
+                        st.warning("请先生成映射预览并确保至少有一条有效规则")
+                    else:
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        status_text.text("处理中...")
+                        temp_file = "temp_remark_type.xlsx"
+                        output_path = None
+                        try:
+                            with open(temp_file, "wb") as f:
+                                f.write(uploaded_bytes)
+                            output_path = process_remark_type_file(temp_file, remark_col, st.session_state.remark_mappings)
+                            progress_bar.progress(100)
+                            status_text.text("处理完成！")
+                            st.balloons()
+
+                            with open(output_path, "rb") as f:
+                                bytes_data = f.read()
+                            b64 = base64.b64encode(bytes_data).decode()
+                            href = f'<a href="data:application/octet-stream;base64,{b64}" download="备注招生类型提取结果.xlsx">点击下载处理结果</a>'
+                            st.markdown(href, unsafe_allow_html=True)
+                        except Exception as e:
+                            st.error(f"处理过程中发生错误: {str(e)}")
+                        finally:
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
+                            if output_path and os.path.exists(output_path):
+                                os.remove(output_path)
 
 # 页脚
 st.markdown("---")
